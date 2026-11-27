@@ -320,6 +320,7 @@ impl GameWorld {
             if let Some(bridge) = self.building_mut(id) {
                 bridge.state = ConstructionState::Complete;
             }
+            self.unindex_foundation(id, record.player, record.footprint);
             self.restore_bridge_deck(span);
         }
         report.buildings += 1;

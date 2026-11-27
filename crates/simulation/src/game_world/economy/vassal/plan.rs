@@ -55,8 +55,6 @@ pub(super) const TIER_WORK_TOWER: u8 = 3;
 pub(super) const REPLAN_TICKS: u64 = 1_200;
 /// A refused site is re-planned around within ten seconds.
 pub(super) const REFUSED_REPLAN_TICKS: u64 = 200;
-/// Work points (camps, mills, Town Centers) that each get a tower.
-const WORK_TOWERS: usize = 8;
 
 impl GameWorld {
     /// The cached plan of domain `id`, rebuilt when stale.
@@ -96,8 +94,9 @@ impl GameWorld {
             d.plan_age = age;
             d.planned = self.tick.0;
             d.replan_at = None;
-            if d.pending.is_none() {
-                d.pending = pending;
+            if let Some(pending) = pending {
+                d.pending = Some(pending);
+                self.economy.vassals.planning.insert(id);
             }
         }
         plan
@@ -246,38 +245,35 @@ pub(super) fn sites(
     let reach = super::ring::RING - 2;
     let toward = threat_vector(w, center, player, hot);
     let add = |sites: &mut Vec<Site>, kind: BuildingKind, at: TileCoord, near: i32, tier: u8| {
-        // Production anywhere in the inner domain is reused, not duplicated.
-        let reuse = if kind == BuildingKind::WatchTower {
-            near
+        let existing = if kind == BuildingKind::WatchTower {
+            // A tower occupies its centre cell. Check only the cells that
+            // could guard this work point, regardless of how many towers
+            // are elsewhere in the domain or owned by this player.
+            (at.y - near..=at.y + near)
+                .flat_map(|y| (at.x - near..=at.x + near).map(move |x| TileCoord::new(x, y)))
+                .filter_map(|tile| {
+                    let b = w.building(w.building_at_for(player, tile)?)?;
+                    (b.player == player
+                        && b.kind.is_tower()
+                        && center_of(b.footprint) == tile
+                        && b.hp > 0
+                        && (b.is_complete() || !refused.contains_key(&b.footprint.min)))
+                    .then_some((b.id, b.footprint.min))
+                })
+                .min()
         } else {
-            reach / 2
+            // Existing production in the inner domain serves the plan.
+            w.player_buildings_of(player, kind)
+                .filter(|b| {
+                    b.hp > 0
+                        && within(center, b.footprint, reach / 2)
+                        && (b.is_complete() || !refused.contains_key(&b.footprint.min))
+                })
+                .map(|b| (b.id, b.footprint.min))
+                .min()
         };
-        let home = if kind == BuildingKind::WatchTower {
-            at
-        } else {
-            center
-        };
-        // An upgraded Guard Tower or Keep still fills a Watch Tower site.
-        let kinds: &[BuildingKind] = if kind == BuildingKind::WatchTower {
-            &[
-                BuildingKind::WatchTower,
-                BuildingKind::GuardTower,
-                BuildingKind::Keep,
-            ]
-        } else {
-            std::slice::from_ref(&kind)
-        };
-        if let Some(b) = kinds
-            .iter()
-            .flat_map(|&k| w.player_buildings_of(player, k))
-            .filter(|b| {
-                b.hp > 0
-                    && within(home, b.footprint, reuse)
-                    && (b.is_complete() || !refused.contains_key(&b.footprint.min))
-            })
-            .min_by_key(|b| b.id)
-        {
-            sites.push(Site::new(kind, b.footprint.min, tier));
+        if let Some((_, tile)) = existing {
+            sites.push(Site::new(kind, tile, tier));
         } else if let Some(tile) = spot(w, player, kind, at, near, refused)
             .or_else(|| spot(w, player, kind, at, near * 3 + 3, refused))
         {
@@ -312,7 +308,7 @@ pub(super) fn sites(
         .map(|b| (b.id, b.footprint))
         .collect();
         points.sort_by_key(|(id, _)| *id);
-        for (_, r) in points.into_iter().take(WORK_TOWERS) {
+        for (_, r) in points {
             let c = center_of(r);
             let at = TileCoord::new(c.x + r.width() / 2 + 2, c.y + r.height() / 2 + 2);
             add(&mut sites, BuildingKind::WatchTower, at, 3, TIER_WORK_TOWER);
@@ -353,11 +349,13 @@ impl GameWorld {
             .get_mut(&id)
             .and_then(|d| d.pending.take());
         let Some(mut pending) = pending else {
+            self.economy.vassals.planning.remove(&id);
             return;
         };
         let result = pending.poll(self);
         if let Some(d) = self.economy.vassals.domains.get_mut(&id) {
             if let Some(roads) = result {
+                self.economy.vassals.planning.remove(&id);
                 d.plan
                     .retain(|s| !matches!(s.kind, BuildingKind::Road | BuildingKind::Bridge));
                 d.plan.extend(roads);
@@ -368,17 +366,14 @@ impl GameWorld {
         }
     }
     pub(super) fn advance_vassal_plans(&mut self) {
-        use std::ops::Bound::{Excluded, Unbounded};
-        let m = &self.economy.vassals;
-        let cursor = m.plan_cursor.unwrap_or(EntityId(0));
-        let next = m
-            .domains
-            .range((Excluded(cursor), Unbounded))
-            .chain(m.domains.range(..=cursor))
-            .find(|(_, d)| d.pending.is_some())
-            .map(|(&id, _)| id);
-        self.economy.vassals.plan_cursor = next;
-        if let Some(id) = next {
+        let active = self
+            .economy
+            .vassals
+            .planning
+            .iter()
+            .copied()
+            .collect::<Vec<_>>();
+        for id in active {
             self.poll_vassal_plan(id);
         }
     }

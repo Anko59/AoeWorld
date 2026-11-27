@@ -132,6 +132,9 @@ impl GameWorld {
                 bridge_span,
             },
         );
+        if !complete {
+            self.index_foundation(id, player, footprint);
+        }
         if complete && kind == BuildingKind::Road {
             self.economy.roads.insert(footprint.min);
         }

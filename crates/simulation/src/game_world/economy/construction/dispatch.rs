@@ -114,7 +114,7 @@ impl GameWorld {
         self.economy.stewards.automatic = automatic;
     }
 
-    pub(super) fn dispatch_builder_limit(&self, b: &crate::GameBuilding) -> usize {
+    pub(super) fn automatic_builder_limit(&self, b: &crate::GameBuilding) -> usize {
         let remaining = b.work_total.saturating_sub(b.work_done);
         let work_per_builder = 20 * u64::from(self.config.tick_hz) * BUILD_WORK_PER_BASE_TICK;
         let footprint = b.footprint;
@@ -135,7 +135,7 @@ impl GameWorld {
         };
         let (player, footprint) = (b.player, b.footprint);
         let tile = footprint.min;
-        let need = self.dispatch_builder_limit(&b);
+        let need = self.automatic_builder_limit(&b);
         let assigned = self.economy.builders.assigned_count(id);
         if assigned >= need || capacity == 0 {
             return (0, 0);

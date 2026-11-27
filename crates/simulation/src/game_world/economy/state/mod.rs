@@ -104,6 +104,7 @@ pub(crate) struct Economy {
     /// Benchmark counters (`GameWorld::gather_work`). Not replay state.
     pub(crate) gather_work: super::gathering::GatherCounters,
     pub(crate) dispatch: super::construction::dispatch::ConstructionDispatch,
+    pub(crate) foundations: super::construction::Foundations,
     pub(crate) builders: super::construction::Builders,
     pub(crate) construction: super::construction::ConstructionTimers,
     pub(crate) depletions: Vec<aoe_map::Depletion>,

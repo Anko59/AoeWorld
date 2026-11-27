@@ -45,6 +45,7 @@ impl GameWorld {
             return None;
         }
         self.economy.buildings.get_mut(&id)?.state = ConstructionState::Complete;
+        self.unindex_foundation(id, player, footprint);
         if kind.is_gate() {
             self.management_barrier_changed(footprint);
         }

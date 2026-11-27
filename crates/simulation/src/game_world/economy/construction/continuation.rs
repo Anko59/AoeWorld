@@ -1,12 +1,10 @@
-//! Bounded build orders and deterministic local continuation.
+//! Bounded build queues and deterministic foundation continuation.
 use super::*;
 use std::collections::BTreeMap;
 
 /// Foundations one villager may hold queued: a player at 70k-unit scale lays
 /// dozens at once. Still bounded, so a client cannot grow a queue without limit.
 const MAX_BUILD_QUEUE: usize = 2_048;
-const CONTINUE_RADIUS: i32 = 10;
-const CONTINUE_TRIES: usize = 4;
 
 #[cfg(test)]
 thread_local! {
@@ -61,25 +59,27 @@ impl GameWorld {
         }
     }
 
-    /// Complete every site before choosing follow-up jobs. One membership
-    /// pass replaces a full builder scan per simultaneously completed farm.
+    /// Complete every site before choosing follow-up jobs. Read the members
+    /// of completed sites in builder order for deterministic reassignment.
     pub(super) fn finish_builders(
         &mut self,
         completed: &BTreeMap<EntityId, (PlayerId, BuildingKind, TileRect)>,
         touched: &mut Vec<EntityId>,
     ) {
-        let finished = self
-            .economy
-            .builders
-            .iter()
-            .filter_map(|(id, job)| {
-                #[cfg(test)]
-                COMPLETION_VISITS.with(|visits| visits.set(visits.get() + 1));
-                completed
-                    .contains_key(&job.building)
-                    .then_some((*id, job.building))
+        let mut finished = completed
+            .keys()
+            .filter_map(|site| {
+                self.economy
+                    .builders
+                    .members
+                    .get(site)
+                    .map(|ids| (site, ids))
             })
+            .flat_map(|(&site, ids)| ids.iter().map(move |&id| (id, site)))
             .collect::<Vec<_>>();
+        #[cfg(test)]
+        COMPLETION_VISITS.with(|visits| visits.set(visits.get() + finished.len()));
+        finished.sort_unstable_by_key(|&(id, _)| id);
         let mut remaining = BTreeMap::<EntityId, usize>::new();
         let mut queued = BTreeMap::<EntityId, usize>::new();
         for &(_, building) in &finished {
@@ -213,41 +213,34 @@ impl GameWorld {
         false
     }
 
-    /// Search only the owner's indexed buildings. Distance is to the nearest
-    /// occupied footprint tile; equal distances resolve by entity ID.
+    /// Read only the owner's live foundations, nearest footprint first.
     pub(super) fn continue_foundation(&mut self, builder: EntityId, player: PlayerId) -> bool {
-        let Some(tile) = self.unit(builder).map(|u| u.position.tile_floor()) else {
+        let Some(unit) = self.unit(builder) else {
             return false;
         };
-        let mut candidates = self
-            .economy
-            .dropoffs
-            .range((player, BuildingKind::TownCenter)..)
-            .take_while(|((owner, _), _)| *owner == player)
-            .flat_map(|(_, ids)| ids)
-            .filter_map(|id| self.building(*id))
-            .filter(|b| {
-                !b.is_complete()
-                    && (!self.economy.dispatch.sites.contains_key(&b.id)
-                        || self.economy.builders.assigned_count(b.id)
-                            < self.dispatch_builder_limit(b))
-            })
-            .filter_map(|b| {
-                let nearest = TileCoord::new(
-                    tile.x.clamp(b.footprint.min.x, b.footprint.max.x - 1),
-                    tile.y.clamp(b.footprint.min.y, b.footprint.max.y - 1),
-                );
-                let distance = distance_squared(tile, nearest);
-                (distance <= (CONTINUE_RADIUS as u64).pow(2)).then_some((
-                    distance,
-                    b.id,
-                    b.footprint,
-                ))
-            })
-            .collect::<Vec<_>>();
-        candidates.sort_unstable_by_key(|(distance, id, _)| (*distance, *id));
-        let nearest = candidates.first().map(|(_, id, _)| *id);
-        for (_, target, _) in candidates.into_iter().take(CONTINUE_TRIES) {
+        let fishing = unit.kind == UnitKind::FishingShip;
+        let from = unit.position.tile_floor();
+        let steward = if fishing {
+            None
+        } else {
+            self.steward_controller(builder)
+        };
+        let mut candidates = self.economy.foundations.nearest(player, from);
+        let mut nearest = None;
+        while let Some(target) = candidates.next(&self.economy.foundations) {
+            let Some(building) = self.building(target).filter(|b| !b.is_complete()) else {
+                continue;
+            };
+            if (building.kind == BuildingKind::FishTrap) != fishing
+                || self.economy.builders.assigned_count(target)
+                    >= self.automatic_builder_limit(&building)
+                || steward.is_some_and(|id| {
+                    !self.economy.steward_homes[&id].connects(from, building.footprint)
+                })
+            {
+                continue;
+            }
+            nearest.get_or_insert(target);
             if self.assign_builders(&[builder], |_| target) {
                 return true;
             }

@@ -205,7 +205,7 @@ impl Regions {
 }
 
 impl Home {
-    pub(super) fn connects(&self, from: TileCoord, target: TileRect) -> bool {
+    pub(in super::super) fn connects(&self, from: TileCoord, target: TileRect) -> bool {
         self.regions
             .as_ref()
             .is_none_or(|regions| regions.connects(from, target))

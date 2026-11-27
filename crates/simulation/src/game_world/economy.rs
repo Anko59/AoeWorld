@@ -69,11 +69,11 @@ pub use vassal::{
     VassalWait,
 };
 
-pub use buildings::{BUILDING_RULES, BuildingRules, MAX_WALL_SEGMENTS, trainable_units};
+pub use buildings::{BUILDING_RULES, BuildingRules, trainable_units};
 pub(crate) use market::MarketCommodity;
 pub use market::{MARKET_RULES, MarketPrices};
 
-/// Villagers one build order may assign to construction.
+/// Builder IDs one construction order may hold, matching bounded wire decoding.
 pub const MAX_BUILD_GROUP: usize = 16_384;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -339,7 +339,7 @@ pub enum EconomyError {
     #[error("a world-wide capacity is reached")]
     Capacity,
     /// An order's unit group is empty, repeats a unit or exceeds
-    /// `MAX_BUILD_GROUP`, or a wall exceeds `MAX_WALL_SEGMENTS`.
+    /// `MAX_BUILD_GROUP`, or the per-worker order queue is full.
     #[error("the order's group or wall length is outside its bounds")]
     OrderTooLarge,
     #[error("requires Feudal Age")]

@@ -218,7 +218,7 @@ fn cancelled_shift_targets_are_skipped_and_move_clears_the_queue() {
 }
 
 #[test]
-fn builders_continue_to_nearest_own_unfinished_site_with_id_ties_and_ten_tile_limit() {
+fn builders_continue_to_nearest_own_unfinished_site_with_id_ties() {
     let (mut world, _, _) = village();
     let builder = villager_at(&mut world, 99, 100);
     let a = world
@@ -240,9 +240,10 @@ fn builders_continue_to_nearest_own_unfinished_site_with_id_ties_and_ten_tile_li
     finish(&mut world, first, 1300);
     assert_eq!(world.economy.builders[&builder].building, second);
     finish(&mut world, second, 1300);
+    assert_eq!(world.economy.builders[&builder].building, far);
+    finish(&mut world, far, 1600);
     assert!(!world.economy.builders.contains_key(&builder));
     assert_eq!(world.building(enemy).unwrap().work_done, 0);
-    assert_eq!(world.building(far).unwrap().work_done, 0);
 }
 
 #[test]
@@ -334,26 +335,41 @@ fn builders_continue_to_every_castle_age_and_bridge_foundation() {
 }
 
 #[test]
-fn auto_continue_includes_ten_tiles_and_excludes_eleven() {
-    for (x, continues) in [(109, true), (110, false)] {
-        let (mut world, _, _) = village();
-        let builder = villager_at(&mut world, 99, 100);
-        let house = world
-            .issue_build(
-                PlayerId(0),
-                &[builder],
-                BuildingKind::House,
-                at(100, 100),
-                false,
-            )
-            .unwrap();
-        let next = foundation(&mut world, PlayerId(0), x, 100);
-        finish(&mut world, house, 600);
-        assert_eq!(
-            world.economy.builders.get(&builder).map(|t| t.building),
-            continues.then_some(next)
-        );
+fn auto_continue_skips_four_sealed_foundations_and_reaches_a_site_twenty_tiles_away() {
+    let (mut world, _, _) = village();
+    let builder = villager_at(&mut world, 99, 100);
+    let house = world
+        .issue_build(
+            PlayerId(0),
+            &[builder],
+            BuildingKind::House,
+            at(100, 100),
+            false,
+        )
+        .unwrap();
+    let mut sealed = Vec::new();
+    for (x, y) in [(94, 95), (99, 94), (104, 97), (95, 104)] {
+        sealed.push(foundation(&mut world, PlayerId(0), x, y));
+        // The complete ring leaves no candidate approach tile for this site.
+        for dy in -1..=2 {
+            for dx in -1..=2 {
+                if dx == -1 || dx == 2 || dy == -1 || dy == 2 {
+                    world.economy.blocked_tiles.insert(at(x + dx, y + dy));
+                }
+            }
+        }
     }
+    let next = foundation(&mut world, PlayerId(0), 119, 100);
+    finish(&mut world, house, 600);
+    assert_eq!(
+        world.economy.builders.get(&builder).map(|t| t.building),
+        Some(next)
+    );
+    for id in sealed {
+        world.issue_cancel_construction(PlayerId(0), id).unwrap();
+    }
+    finish(&mut world, next, 1600);
+    assert!(!world.economy.builders.contains_key(&builder));
 }
 
 #[test]

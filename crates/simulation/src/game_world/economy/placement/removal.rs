@@ -16,6 +16,9 @@ impl GameWorld {
         let Some(building) = self.economy.buildings.remove(&id) else {
             return;
         };
+        if !building.is_complete() {
+            self.unindex_foundation(id, building.player, building.footprint);
+        }
         if building.kind == BuildingKind::Bridge
             && building.is_complete()
             && let Some(span) = building.bridge_span

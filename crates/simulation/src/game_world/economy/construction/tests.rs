@@ -5,7 +5,7 @@ use aoe_core::{Seed, WorldConfig};
 use std::collections::BTreeMap;
 
 #[test]
-fn completion_membership_visits_twenty_thousand_builders_once() {
+fn completion_membership_visits_only_builders_of_the_completed_sites() {
     let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(1)).unwrap()).unwrap();
     let mut completed = BTreeMap::new();
     for player in 0..100_u16 {
@@ -30,12 +30,24 @@ fn completion_membership_visits_twenty_thousand_builders_once() {
             );
         }
     }
+    let unrelated = EntityId(40_000);
+    world.economy.builders.insert(
+        unrelated,
+        BuildTask {
+            building: EntityId(40_001),
+            attempts: 0,
+            queue: Vec::new(),
+        },
+    );
     // No live actors are needed to exercise membership lookup and release.
     continuation::COMPLETION_VISITS.with(|visits| visits.set(0));
     let mut changed = Vec::new();
     world.finish_builders(&completed, &mut changed);
     assert_eq!(changed.len(), 20_000);
-    assert!(world.economy.builders.is_empty());
+    assert_eq!(
+        world.economy.builders.keys().copied().collect::<Vec<_>>(),
+        [unrelated]
+    );
     continuation::COMPLETION_VISITS.with(|visits| assert_eq!(visits.get(), 20_000));
 }
 

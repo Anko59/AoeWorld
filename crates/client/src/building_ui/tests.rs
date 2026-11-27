@@ -240,7 +240,7 @@ fn art_selection_distinguishes_every_kind_and_construction_stage() {
 }
 
 #[wasm_bindgen_test::wasm_bindgen_test]
-fn walls_include_both_endpoints_and_refuse_unbounded_lines() {
+fn walls_include_both_endpoints_across_the_old_segment_cap() {
     assert_eq!(
         wall_tiles(TileCoord::new(0, 0), TileCoord::new(2, 2)).unwrap(),
         vec![
@@ -250,10 +250,10 @@ fn walls_include_both_endpoints_and_refuse_unbounded_lines() {
         ]
     );
     assert_eq!(
-        wall_tiles(TileCoord::new(0, 0), TileCoord::new(199, 0))
+        wall_tiles(TileCoord::new(0, 0), TileCoord::new(1069, 0))
             .unwrap()
             .len(),
-        200
+        1070
     );
     assert!(wall_tiles(TileCoord::new(0, 0), TileCoord::new(i32::MAX, 0)).is_none());
 }

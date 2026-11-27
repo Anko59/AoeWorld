@@ -230,8 +230,6 @@ pub(in super::super) fn preview(client: &Client, units: &mut Vec<aoe_rendering::
         && let Some(at) = client.pointer.and_then(|p| construction::origin(client, p))
     {
         let tiles = construction::tiles(client, at).unwrap_or_default();
-        let valid = construction::span_valid(client, kind, &tiles);
-        state.push(f64::from(u8::from(valid)));
         let bridge = kind == aoe_protocol::BuildingKind::Bridge;
         let count = if bridge {
             tiles.len().saturating_sub(2)
@@ -244,9 +242,51 @@ pub(in super::super) fn preview(client: &Client, units: &mut Vec<aoe_rendering::
                 .zip(tiles.last())
                 .is_some_and(|(&a, &b)| aoe_core::BridgeSpan::new(a, b).is_some());
         let available = geometry && construction::enabled(client, kind, count as u32);
-        let invalid = (0..tiles.len())
-            .filter(|i| !available || !construction::tile_valid(client, kind, &tiles, *i))
-            .count();
+        let mut invalid = 0;
+        let age = client
+            .village
+            .players
+            .iter()
+            .find(|p| p.player == owner(client))
+            .map_or(aoe_protocol::Age::Dark, |p| p.age);
+        for (index, t) in tiles.iter().enumerate() {
+            let legal = available && construction::tile_valid(client, kind, &tiles, index);
+            invalid += usize::from(!legal);
+            let position = [
+                f64::from(t.x) + f64::from(kind.side()) / 2.0,
+                f64::from(t.y) + f64::from(kind.depth()) / 2.0,
+            ];
+            units.push(aoe_rendering::SceneUnit {
+                kind: if bridge {
+                    building_ui::bridge_piece(&tiles, index)
+                } else {
+                    aoe_rendering::SceneUnitKind::building(building_ui::age_sprite_slot(
+                        kind, 1000, false, age,
+                    ) as u8)
+                },
+                id: aoe_core::EntityId((1 << 31) + index as u32),
+                position,
+                visual: aoe_rendering::SceneUnitVisual::new(false)
+                    .with_player(
+                        Some(owner(client)),
+                        owner(client),
+                        client.team_colour,
+                        false,
+                    )
+                    .with_ghost(legal),
+                facing: if kind.is_wall() {
+                    building_ui::wall_frame(*t, |p| {
+                        index.checked_sub(1).and_then(|i| tiles.get(i)) == Some(&p)
+                            || tiles.get(index + 1) == Some(&p)
+                    })
+                } else {
+                    0
+                },
+                elevation_meters: map::elevation_at_world(client, position) as f32,
+            });
+        }
+        let valid = count > 0 && invalid == 0;
+        state.push(f64::from(u8::from(valid)));
         let reason = if !bridge || valid {
             0
         } else if tiles.len() < 2 {
@@ -269,43 +309,6 @@ pub(in super::super) fn preview(client: &Client, units: &mut Vec<aoe_rendering::
             6
         };
         state.extend([tiles.len() as f64, invalid as f64, f64::from(reason)]);
-        let age = client
-            .village
-            .players
-            .iter()
-            .find(|p| p.player == owner(client))
-            .map_or(aoe_protocol::Age::Dark, |p| p.age);
-        for (index, t) in tiles.iter().enumerate() {
-            let position = [
-                f64::from(t.x) + f64::from(kind.side()) / 2.0,
-                f64::from(t.y) + f64::from(kind.depth()) / 2.0,
-            ];
-            units.push(aoe_rendering::SceneUnit {
-                kind: if bridge {
-                    building_ui::bridge_piece(&tiles, index)
-                } else {
-                    aoe_rendering::SceneUnitKind::building(building_ui::age_sprite_slot(
-                        kind, 1000, false, age,
-                    ) as u8)
-                },
-                id: aoe_core::EntityId((1 << 31) + index as u32),
-                position,
-                visual: aoe_rendering::SceneUnitVisual::new(false)
-                    .with_player(
-                        Some(owner(client)),
-                        owner(client),
-                        client.team_colour,
-                        false,
-                    )
-                    .with_ghost(available && construction::tile_valid(client, kind, &tiles, index)),
-                facing: if kind.is_wall() {
-                    building_ui::wall_frame(*t, |p| tiles.contains(&p))
-                } else {
-                    0
-                },
-                elevation_meters: map::elevation_at_world(client, position) as f32,
-            });
-        }
     }
     placement_update(&state);
 }

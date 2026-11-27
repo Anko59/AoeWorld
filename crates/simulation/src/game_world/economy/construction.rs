@@ -16,10 +16,12 @@ const APPROACH_TILE_TRIES: usize = 6;
 mod clearance;
 mod continuation;
 pub(crate) mod dispatch;
+mod foundations;
 mod jobs;
 mod progress;
 mod repair;
 mod sleep;
+pub(crate) use foundations::Foundations;
 pub(crate) use jobs::Builders;
 pub(crate) use sleep::ConstructionTimers;
 pub use sleep::ConstructionWork;
@@ -352,8 +354,6 @@ impl GameWorld {
         }
     }
 
-    /// Advance every builder and foundation. Cost is bounded by the builders
-    /// (at most `MAX_BUILDERS`) and, on completion, the buildings.
     pub(super) fn advance_construction(&mut self, changed: &mut Vec<EntityId>) {
         let mut working = self.wake_before_construction(changed);
         if self.economy.builders.is_empty() {
