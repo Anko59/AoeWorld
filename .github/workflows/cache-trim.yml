@@ -1,0 +1,29 @@
+name: AoeWorld cache budget
+
+# After every validation run on dev, delete the Rust build caches that a newer one replaced
+# (.github/actions/cache-trim). The token may delete caches, so this workflow runs no code of a pull
+# request: `workflow_run` and the checkout both come from dev.
+on:
+  workflow_run:
+    workflows: [AoeWorld validation]
+    types: [completed]
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: cache-trim
+  cancel-in-progress: false
+
+jobs:
+  trim:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dev
+      - uses: ./.github/actions/cache-trim
