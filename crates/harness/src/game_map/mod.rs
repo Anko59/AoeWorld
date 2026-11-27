@@ -39,12 +39,10 @@ pub(crate) struct Options {
     #[arg(long, env = "AOE_GEODATA_CACHE", default_value = ".cache/geodata")]
     pub(crate) cache: PathBuf,
     /// The directory that holds package manifests and their `pages/<hash>/` directories.
-    #[arg(
-        long,
-        env = "AOE_MAP_PACKAGE",
-        default_value = ".cache/game-map/packages"
-    )]
-    pub(crate) packages: PathBuf,
+    /// Omitted: `packages` of the shared home of the game score, beside `aoe-cargo` in the
+    /// common Git directory, which every worktree and every container sees.
+    #[arg(long, env = "AOE_MAP_PACKAGE")]
+    pub(crate) packages: Option<PathBuf>,
     /// The release `aoe-map-worker` executable.
     #[arg(long, default_value = "target/release/aoe-map-worker")]
     pub(crate) worker: PathBuf,
@@ -76,7 +74,17 @@ pub(crate) enum Outcome {
     Unavailable(String),
 }
 
-pub(crate) fn run(options: Options) -> Result<()> {
+impl Options {
+    /// The package directory: the flag or the variable, else the shared home's.
+    pub(crate) fn packages(&self) -> PathBuf {
+        self.packages
+            .clone()
+            .unwrap_or_else(crate::game_score::pr::home::default_packages)
+    }
+}
+
+pub(crate) fn run(mut options: Options) -> Result<()> {
+    options.packages = Some(options.packages());
     let outcome = ensure(&options)?;
     for line in report(&options, outcome)? {
         println!("{line}");
@@ -147,13 +155,13 @@ fn find_existing(directory: &Path, request: &MapRequest) -> Result<Option<Ready>
 
 pub(crate) fn ensure(options: &Options) -> Result<Outcome> {
     let request = parse_request(&read_limited(&options.request)?)?;
-    if let Some(ready) = find_existing(&options.packages, &request)? {
+    if let Some(ready) = find_existing(&options.packages(), &request)? {
         return Ok(Outcome::Ready(ready));
     }
     if options.no_fetch {
         return Ok(Outcome::Unavailable(format!(
             "map unavailable: {} holds no package for {} and --no-fetch forbids making one",
-            options.packages.display(),
+            options.packages().display(),
             cache_key(&request)
         )));
     }
@@ -161,14 +169,14 @@ pub(crate) fn ensure(options: &Options) -> Result<Outcome> {
     if let Err(error) = worker.retrying("bootstrap") {
         return Ok(Outcome::Unavailable(format!("map unavailable: {error}")));
     }
-    fs::create_dir_all(&options.packages)?;
+    fs::create_dir_all(options.packages())?;
     if let Err(error) = worker.retrying("map-generate") {
         return Ok(Outcome::Unavailable(format!("map unavailable: {error}")));
     }
-    let Some(mut ready) = find_existing(&options.packages, &request)? else {
+    let Some(mut ready) = find_existing(&options.packages(), &request)? else {
         return Err(format!(
             "map-generate succeeded but {} holds no package for {}",
-            options.packages.display(),
+            options.packages().display(),
             cache_key(&request)
         )
         .into());
@@ -180,14 +188,14 @@ pub(crate) fn ensure(options: &Options) -> Result<Outcome> {
 
 /// The lines to print; in soft mode an unavailable map is a line and a marker, not an error.
 pub(crate) fn report(options: &Options, outcome: Outcome) -> Result<Vec<String>> {
-    let marker = options.packages.join(UNAVAILABLE_MARKER);
+    let marker = options.packages().join(UNAVAILABLE_MARKER);
     match outcome {
         Outcome::Ready(ready) => {
             let _ = fs::remove_file(&marker);
             let directory = options
-                .packages
+                .packages()
                 .canonicalize()
-                .unwrap_or_else(|_| options.packages.clone());
+                .unwrap_or_else(|_| options.packages());
             Ok(vec![
                 format!("hash={}", ready.hash),
                 format!("request={}", ready.request_id),
@@ -207,7 +215,7 @@ pub(crate) fn report(options: &Options, outcome: Outcome) -> Result<Vec<String>>
             ])
         }
         Outcome::Unavailable(reason) if options.soft => {
-            fs::create_dir_all(&options.packages)?;
+            fs::create_dir_all(options.packages())?;
             fs::write(&marker, format!("{reason}\n"))?;
             Ok(vec![reason])
         }
@@ -226,7 +234,7 @@ impl Worker<'_> {
         command
             .args(arguments)
             .env("AOE_MAP_REQUEST", &options.request)
-            .env("AOE_MAP_PACKAGE", &options.packages)
+            .env("AOE_MAP_PACKAGE", options.packages())
             .env("AOE_GEODATA_CACHE", &options.cache)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -277,7 +285,7 @@ impl Worker<'_> {
 
     fn verify(&self, manifest: &Path) -> Result<()> {
         let options = Options {
-            packages: manifest.to_path_buf(),
+            packages: Some(manifest.to_path_buf()),
             ..self.options.clone()
         };
         Worker { options: &options }
@@ -287,7 +295,7 @@ impl Worker<'_> {
 }
 
 /// Echo a child's stream as it arrives and keep its last lines for the failure message.
-fn spawn_tail<R: std::io::Read + Send + 'static>(
+pub(crate) fn spawn_tail<R: std::io::Read + Send + 'static>(
     stream: R,
     to_stderr: bool,
 ) -> thread::JoinHandle<Vec<String>> {

@@ -50,7 +50,7 @@ fn options(root: &Path, worker: PathBuf) -> Options {
     Options {
         request: request_path,
         cache: root.join("geodata"),
-        packages: root.join("packages"),
+        packages: Some(root.join("packages")),
         worker,
         attempts: 2,
         retry_wait_seconds: 0,
@@ -103,14 +103,14 @@ fn an_existing_package_for_the_request_is_reused_without_running_the_worker() {
     let temp = tempfile::tempdir().unwrap();
     let worker = fake_worker(temp.path(), "exit 1");
     let options = options(temp.path(), worker);
-    let hash = publish_package(&options.packages, request());
+    let hash = publish_package(&options.packages(), request());
     match ensure(&options).unwrap() {
         Outcome::Ready(ready) => {
             assert_eq!(ready.hash, hash);
             assert!(!ready.generated);
             assert_eq!(
                 ready.manifest,
-                options.packages.join(format!("{hash}.json"))
+                options.packages().join(format!("{hash}.json"))
             );
         }
         Outcome::Unavailable(reason) => panic!("{reason}"),
@@ -126,7 +126,7 @@ fn a_package_of_another_request_is_not_taken_for_this_one() {
     options.no_fetch = true;
     let mut other = request();
     other.seed = 7;
-    publish_package(&options.packages, other);
+    publish_package(&options.packages(), other);
     assert!(matches!(ensure(&options).unwrap(), Outcome::Unavailable(_)));
 }
 
@@ -136,8 +136,8 @@ fn a_manifest_without_its_pages_is_not_a_package() {
     let worker = fake_worker(temp.path(), "exit 1");
     let mut options = options(temp.path(), worker);
     options.no_fetch = true;
-    let hash = publish_package(&options.packages, request());
-    fs::remove_dir_all(options.packages.join("pages").join(hash)).unwrap();
+    let hash = publish_package(&options.packages(), request());
+    fs::remove_dir_all(options.packages().join("pages").join(hash)).unwrap();
     assert!(matches!(ensure(&options).unwrap(), Outcome::Unavailable(_)));
 }
 
@@ -182,7 +182,7 @@ fn a_cold_cache_bootstraps_with_retries_then_generates_and_verifies() {
     let options = options(temp.path(), worker);
     let staged = temp.path().join("staged");
     let hash = publish_package(&staged, request());
-    fs::create_dir_all(&options.packages).unwrap();
+    fs::create_dir_all(options.packages()).unwrap();
     let Outcome::Ready(ready) = ensure(&options).unwrap() else {
         panic!("generation succeeds on the second bootstrap");
     };
@@ -217,7 +217,7 @@ fn soft_mode_prints_the_reason_and_leaves_a_marker_for_the_later_job() {
     let lines = report(&options, ensure(&options).unwrap()).unwrap();
     assert_eq!(lines.len(), 1);
     assert!(lines[0].starts_with("map unavailable:"), "{lines:?}");
-    let marker = fs::read_to_string(options.packages.join(UNAVAILABLE_MARKER)).unwrap();
+    let marker = fs::read_to_string(options.packages().join(UNAVAILABLE_MARKER)).unwrap();
     assert_eq!(marker.trim(), lines[0]);
     options.soft = false;
     assert!(report(&options, ensure(&options).unwrap()).is_err());
@@ -228,17 +228,17 @@ fn a_ready_report_gives_hash_directory_and_manifest_and_clears_the_marker() {
     let temp = tempfile::tempdir().unwrap();
     let worker = fake_worker(temp.path(), "exit 1");
     let options = options(temp.path(), worker);
-    fs::create_dir_all(&options.packages).unwrap();
+    fs::create_dir_all(options.packages()).unwrap();
     fs::write(
-        options.packages.join(UNAVAILABLE_MARKER),
+        options.packages().join(UNAVAILABLE_MARKER),
         "map unavailable: old",
     )
     .unwrap();
-    let hash = publish_package(&options.packages, request());
+    let hash = publish_package(&options.packages(), request());
     let lines = report(&options, ensure(&options).unwrap()).unwrap();
     assert_eq!(lines[0], format!("hash={hash}"));
     assert_eq!(lines[1], format!("request={}", cache_key(&request())));
     assert!(lines[2].starts_with("directory=/"), "{lines:?}");
     assert!(lines[3].ends_with(&format!("{hash}.json")), "{lines:?}");
-    assert!(!options.packages.join(UNAVAILABLE_MARKER).exists());
+    assert!(!options.packages().join(UNAVAILABLE_MARKER).exists());
 }

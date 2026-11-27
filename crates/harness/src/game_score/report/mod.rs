@@ -12,6 +12,9 @@ use super::measure::Measurement;
 use super::scenarios::Scenario;
 use serde_json::{Value, json};
 
+/// The version of the report's layout (`schema`); a reader that compares two reports checks it.
+pub(super) const SCHEMA: u64 = 1;
+
 /// One scenario as it was played: its runs (one per worker count) and what
 /// comparing them showed.
 pub(super) struct Played {
@@ -72,7 +75,7 @@ fn scenario(played: &Played) -> Value {
 /// The JSON report: `schema`, `header`, then one object per scenario.
 pub(super) fn json(header: Value, played: &[Played], table: &str) -> Value {
     json!({
-        "schema": 1,
+        "schema": SCHEMA,
         "name": "game score",
         "header": header,
         "scenarios": played.iter().map(scenario).collect::<Vec<_>>(),

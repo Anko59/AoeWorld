@@ -255,6 +255,14 @@ fn selection(
 }
 
 fn current_selection(base: Option<&str>) -> Result<Selection, Box<dyn Error>> {
+    Ok(current(base)?.0)
+}
+
+/// The selection for the current branch against `base`, and the local checks `make ship` adds
+/// to it for the same changed paths.
+fn current(
+    base: Option<&str>,
+) -> Result<(Selection, BTreeMap<String, select::LocalDecision>), Box<dyn Error>> {
     let root = repository_root()?;
     let registry = Registry::load(&root)?;
     let rules = Rules::load(&root, &registry)?;
@@ -274,6 +282,7 @@ fn current_selection(base: Option<&str>) -> Result<Selection, Box<dyn Error>> {
     };
     let sources = paths.iter().any(|path| rules.reads(path));
     let graph = Graph::load(&root, &rules, sources)?;
+    let local = select::decide_local(&rules, &graph, &paths);
     let mut manifest = selection(
         &registry,
         &rules,
@@ -284,7 +293,24 @@ fn current_selection(base: Option<&str>) -> Result<Selection, Box<dyn Error>> {
         requested_base.is_some(),
     )?;
     manifest.requested_base = requested_base;
-    Ok(manifest)
+    Ok((manifest, local))
+}
+
+/// What the local check `name` (a `local_checks` rule) decides for the commits of the current
+/// branch since its merge base with `base`. An unreadable base is an error here, never a
+/// silent "everything changed": the caller reports that it cannot compare.
+pub fn local_check(base: &str, name: &str) -> Result<select::LocalDecision, Box<dyn Error>> {
+    let root = repository_root()?;
+    let registry = Registry::load(&root)?;
+    let rules = Rules::load(&root, &registry)?;
+    let paths = changed_paths(
+        &paths::resolve(Path::new("."), base)
+            .map_err(|error| format!("cannot read the changes against {base}: {error}"))?,
+    )?;
+    let graph = Graph::load(&root, &rules, false)?;
+    select::decide_local(&rules, &graph, &paths)
+        .remove(name)
+        .ok_or_else(|| format!("gates/ci-rules.json has no local check {name}").into())
 }
 
 // A dispatcher chooses a ref, never the comparison that determines its gates:
@@ -350,7 +376,7 @@ fn explain(selection: &Selection, markdown: bool) -> String {
 
 /// What CI will run for the current branch against `base`, job by job, and why.
 pub fn ci_explain(base: &str) -> Result<(), Box<dyn Error>> {
-    let selection = current_selection(Some(base))?;
+    let (selection, local) = current(Some(base))?;
     println!(
         "CI for {} against {} ({} changed paths); a push to dev or the nightly runs every job",
         selection.revision,
@@ -361,6 +387,7 @@ pub fn ci_explain(base: &str) -> Result<(), Box<dyn Error>> {
         println!("note: uncommitted changes are not counted; CI sees commits only");
     }
     print!("{}", explain(&selection, false));
+    print!("{}", select::explain_local(&local));
     Ok(())
 }
 

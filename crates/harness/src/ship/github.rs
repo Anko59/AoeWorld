@@ -397,6 +397,61 @@ pub(super) fn probe_video(root: &Path, video: &Path) -> Result<(u32, bool)> {
         .ok_or_else(|| format!("{} is not a readable video", video.display()).into())
 }
 
+/// Attaches the showcase video to the pull request at `url` and puts it in the `What` section of
+/// its description (`SHIP_VIDEO`); nothing to do without a video.
+pub(super) fn attach_video(root: &Path, url: &str, options: &Options) -> Result<()> {
+    let (Some(video), Some(body)) = (&options.video, &options.body_file) else {
+        return Ok(());
+    };
+    let repository = git::origin_repository(root)?;
+    let body = body.display().to_string();
+    let video = video.display().to_string();
+    gh(
+        root,
+        &[
+            "pr",
+            "edit",
+            url,
+            "--repo",
+            &repository,
+            "--body-file",
+            &body,
+            "--attach",
+            &video,
+        ],
+    )?;
+    let remote_body = gh(
+        root,
+        &[
+            "pr",
+            "view",
+            url,
+            "--repo",
+            &repository,
+            "--json",
+            "body",
+            "--jq",
+            ".body",
+        ],
+    )?;
+    let submitted_body = fs::read_to_string(&body)?;
+    let body_with_video = describe::place_video_in_what(&submitted_body, &remote_body);
+    fs::write(&body, body_with_video)?;
+    gh(
+        root,
+        &[
+            "pr",
+            "edit",
+            url,
+            "--repo",
+            &repository,
+            "--body-file",
+            &body,
+        ],
+    )?;
+    Ok(())
+}
+
 /// The two-part description: the agent's template and the review.
 pub(super) fn description(
     root: &Path,

@@ -66,8 +66,9 @@ match-bench-steps:
 
 # The game score (docs/scale/game-score.md): real games on a real map, played by the Rust AI in process,
 # measured, and replayed at 1 and N workers to check that both play the same game. GAME_SCORE_ARGS passes
-# harness flags, e.g. "--scenario late --workers 1,4" or "--package-directory .cache/game-score/packages --map-hash <hash>".
-.PHONY: game-score game-score-admitted game-score-steps
+# harness flags, e.g. "--scenario late --workers 1,4" or "--package-directory <dir> --map-hash <hash>"; the map
+# is in the shared home (aoe-game-score beside aoe-cargo in the common Git directory) unless a flag says otherwise.
+.PHONY: game-score game-score-admitted game-score-steps game-score-pr game-score-pr-admitted game-score-pr-steps
 game-score: resource-bootstrap
 	@$(RESOURCE_LONG) game-score -- $(MAKE) --no-print-directory game-score-admitted
 
@@ -76,6 +77,25 @@ game-score-admitted: job-bootstrap
 
 game-score-steps:
 	@$(DOCKER_RUN) cargo run --release --locked -p aoe-harness -- game-score $(GAME_SCORE_ARGS)
+
+# The game score of this branch against its merge base, as `make ship` runs it when the change can affect
+# the game: the debug harness decides, then release-builds this checkout (and, on a cache miss, the merge
+# base in the shared home) and plays. GAME_SCORE_PR_ARGS passes harness flags, e.g. "--description <file>".
+game-score-pr: resource-bootstrap
+	@$(RESOURCE_LONG) game-score-pr -- $(MAKE) --no-print-directory game-score-pr-admitted
+
+game-score-pr-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory game-score-pr-steps
+
+game-score-pr-steps:
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- game-score-pr $(GAME_SCORE_PR_ARGS)
+
+# How much each judged number moves across seeds on the same code: the reports of `make game-score` at
+# seeds 1 to 8 (docs/scale/game-score.md) become scenarios/spread.json, which the verdict reads.
+# GAME_SCORE_SPREAD_ARGS: "--reports <directory of seed-<n>.json> --commit <sha> --date <YYYY-MM-DD>".
+.PHONY: game-score-spread
+game-score-spread:
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- game-score-spread $(GAME_SCORE_SPREAD_ARGS)
 
 # Movement apply census: the ignored 100-seat profiling test, under the long-job lock.
 .PHONY: movement-apply-census movement-apply-census-admitted movement-apply-census-steps
