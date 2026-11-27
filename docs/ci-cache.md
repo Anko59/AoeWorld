@@ -16,6 +16,11 @@ below the limit.
 | Docker layers, one scope per Dockerfile | BuildKit `buildkit-blob-…`, `index-<scope>-…` | every job on a push to dev (`DOCKER_BUILD_CACHE_SAVE`) | every job |
 | game map package | `game-map-<request>-<generator>` | `game-map.yml` | the game map actions |
 
+Sizes, compressed, measured with `gh cache list` on 2026-11-27 after the first dev push that saved the
+legs and the first `cache-trim` run: `perf` 464 MiB, `e2e` 342, `browser` 279 (saved by the pruning
+save), `unit` 1,182 and `checks` 987 (saved before the pruning, they shrink at their next save), Docker
+layers about 2.4 GB, game map 66 MiB. The repository cache went from 10.13 GB to 4.6 GB.
+
 ## The rules that keep it small
 
 - Only a push to dev writes a cache. A pull request restores and never saves (Rust and Docker).
