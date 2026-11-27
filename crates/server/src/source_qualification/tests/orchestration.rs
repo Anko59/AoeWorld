@@ -302,7 +302,7 @@ async fn synthetic_flat_sahara_package_exercises_full_offline_qualification_cont
             tile: TileCoord::new(25_004, 24_968),
             kind: aoe_map::ResourceKind::Gold,
             object: aoe_map::ObjectKind::GoldDeposit,
-            initial_amount: 800,
+            initial_amount: 3_200,
             visual_variant: 183,
         }
     );
