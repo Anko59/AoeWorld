@@ -42,23 +42,6 @@ fn report() -> Report {
     }
 }
 #[test]
-fn history_and_expiry_are_bounded_without_exposing_tokens() {
-    let mut reports = Reports::default();
-    for id in 0..70 {
-        if id >= 64 {
-            reports.0.front_mut().unwrap().at = Instant::now() - Duration::from_secs(56);
-        }
-        reports
-            .record(aoe_protocol::ResumeToken([id; 24]), report(), 0, 7)
-            .unwrap();
-    }
-    assert_eq!(reports.0.len(), 64);
-    assert_eq!(reports.0.front().unwrap().token.0[0], 6);
-    reports.0[0].at = Instant::now() - Duration::from_secs(121);
-    assert_eq!(reports.recent(7).as_array().unwrap().len(), 63);
-    assert!(reports.recent(7)[0].get("token").is_none());
-}
-#[test]
 fn nonfinite_negative_and_unordered_observations_are_rejected() {
     for q in [
         [f64::NAN, 1.0, 2.0],
@@ -74,22 +57,109 @@ fn nonfinite_negative_and_unordered_observations_are_rejected() {
     assert!(report().valid());
 }
 
-#[test]
-fn cycling_more_than_the_history_limit_cannot_bypass_report_rate_limits() {
-    let mut reports = Reports::default();
-    for id in 0..64 {
-        reports
-            .record(aoe_protocol::ResumeToken([id; 24]), report(), 0, 7)
-            .unwrap();
+#[tokio::test]
+async fn all_65_human_seats_reach_the_match_journal() {
+    use crate::{Config, GameplayService, gameplay::SlotSetup};
+    use aoe_core::{EntityId, PlayerId};
+
+    let dir = tempfile::tempdir().unwrap();
+    let config = Config {
+        bind: "127.0.0.1:0".parse().unwrap(),
+        scenario: aoe_scenario::SMOKE,
+        tick_hz: 10,
+        asset_pack: None,
+        map_package_directory: Some(dir.path().to_path_buf()),
+        open_map_package: None,
+        map_worker: None,
+        geodata_cache_directory: dir.path().join("geodata"),
+    };
+    let state = AppState::new(&config, "test").unwrap();
+    let (world, _) = aoe_simulation::GameWorld::default_with_village(config.scenario.seed);
+    let gameplay = GameplayService::from_world_slots(
+        world,
+        (1..=65)
+            .map(|id| SlotSetup {
+                player: PlayerId(id),
+                primary_unit_id: EntityId(0),
+                human: true,
+            })
+            .collect(),
+        None,
+        None,
+    );
+    let seats = gameplay.slot_infos().await;
+    let world_id = gameplay.world_id();
+    *state.gameplay.write().await = gameplay;
+    let path = dir
+        .path()
+        .join(format!("matches/{world_id:016x}/telemetry.jsonl"));
+
+    for minute in 0..2 {
+        for (index, seat) in seats.iter().enumerate() {
+            let mut headers = HeaderMap::new();
+            let token: String = seat
+                .token
+                .0
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect();
+            headers.insert("x-aoeworld-controller-token", token.parse().unwrap());
+            let mut sample = report();
+            sample.units_in_view = minute * 65 + index as u32;
+            assert_eq!(
+                receive(State(state.clone()), headers.clone(), Json(sample.clone())).await,
+                Ok(StatusCode::NO_CONTENT),
+                "minute {minute}, seat {index}"
+            );
+            assert_eq!(
+                receive(State(state.clone()), headers, Json(sample)).await,
+                Err(StatusCode::TOO_MANY_REQUESTS)
+            );
+        }
+        for entry in state.client_perf.lock().await.by_session.values_mut() {
+            entry.at -= Duration::from_secs(60);
+        }
     }
+
+    let journal = std::fs::read_to_string(path).unwrap();
+    let counts: Vec<_> = journal
+        .lines()
+        .map(|line| {
+            let row: serde_json::Value = serde_json::from_str(line).unwrap();
+            assert_eq!(row["kind"], "client");
+            assert!(row.get("token").is_none());
+            row["report"]["units_in_view"].as_u64().unwrap()
+        })
+        .collect();
+    assert_eq!(counts, (0..130).collect::<Vec<_>>());
+}
+
+#[test]
+fn a_seat_keeps_one_report_and_its_own_full_minute_cooldown() {
+    let mut reports = Reports::default();
+    let token = aoe_protocol::ResumeToken([7; 24]);
+    assert_eq!(reports.record(token, report(), 0, 7), Ok(()));
+    let entry = reports.by_session.get_mut(&token.0).unwrap();
+    entry.at -= Duration::from_secs(56);
     assert_eq!(
-        reports.record(aoe_protocol::ResumeToken([64; 24]), report(), 0, 7),
+        reports.record(token, report(), 0, 7),
         Err(StatusCode::TOO_MANY_REQUESTS)
     );
-    assert_eq!(
-        reports.record(aoe_protocol::ResumeToken([0; 24]), report(), 0, 7),
-        Err(StatusCode::TOO_MANY_REQUESTS)
-    );
+    let entry = reports.by_session.get_mut(&token.0).unwrap();
+    entry.at -= Duration::from_secs(4);
+    assert_eq!(reports.record(token, report(), 0, 7), Ok(()));
+    assert_eq!(reports.by_session.len(), 1);
+    let recent = reports.recent(7);
+    assert_eq!(recent.as_array().unwrap().len(), 1);
+    assert!(recent[0].get("token").is_none());
+    reports.by_session.get_mut(&token.0).unwrap().at -= Duration::from_secs(120);
+    assert_eq!(reports.recent(7), serde_json::json!([]));
+
+    let replacement_token = aoe_protocol::ResumeToken([8; 24]);
+    assert_eq!(reports.record(replacement_token, report(), 0, 8), Ok(()));
+    assert_eq!(reports.by_session.len(), 1);
+    assert_eq!(reports.recent(7), serde_json::json!([]));
+    assert_eq!(reports.recent(8).as_array().unwrap().len(), 1);
 }
 
 #[test]

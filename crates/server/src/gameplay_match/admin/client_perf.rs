@@ -7,11 +7,11 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::VecDeque,
+    collections::HashMap,
     time::{Duration, Instant},
 };
 
-const REPORT_RATE: Duration = Duration::from_secs(55);
+const REPORT_RATE: Duration = Duration::from_secs(60);
 
 type Quantiles = [f64; 3];
 #[derive(Clone, Deserialize, Serialize)]
@@ -141,13 +141,17 @@ impl Report {
     }
 }
 struct Entry {
-    world_id: u64,
-    token: aoe_protocol::ResumeToken,
     at: Instant,
     report: Report,
 }
+
 #[derive(Default)]
-pub(crate) struct Reports(VecDeque<Entry>);
+pub(crate) struct Reports {
+    world_id: u64,
+    // Only authenticated human seat tokens from this match can reach record().
+    by_session: HashMap<[u8; 24], Entry>,
+}
+
 impl Reports {
     fn record(
         &mut self,
@@ -157,44 +161,43 @@ impl Reports {
         world_id: u64,
     ) -> Result<(), StatusCode> {
         let now = Instant::now();
-        self.0.retain(|entry| entry.world_id == world_id);
-        if let Some(index) = self.0.iter().position(|e| e.token == token) {
-            if now.duration_since(self.0[index].at) < REPORT_RATE {
-                return Err(StatusCode::TOO_MANY_REQUESTS);
-            }
-            self.0.remove(index);
+        if self.world_id != world_id {
+            *self = Self {
+                world_id,
+                ..Self::default()
+            };
         }
-        if self.0.len() == 64 {
-            // Do not evict a token while its rate window is still live:
-            // cycling 65 sessions must not bypass the per-token limit.
-            if self
-                .0
-                .front()
-                .is_some_and(|e| now.duration_since(e.at) < REPORT_RATE)
-            {
-                return Err(StatusCode::TOO_MANY_REQUESTS);
-            }
-            self.0.pop_front();
+        if self
+            .by_session
+            .get(&token.0)
+            .is_some_and(|entry| now.duration_since(entry.at) < REPORT_RATE)
+        {
+            return Err(StatusCode::TOO_MANY_REQUESTS);
         }
         // Never log session secrets or trust client timing as server performance.
         tracing::info!(tick, frames = report.frames, frame_ms = ?report.frame_ms,
             stages_ms = ?serde_json::to_value(&report.stages_ms).ok(),
             draw_calls = ?report.draw_calls, renderer = %report.renderer,
             contour = ?serde_json::to_value(&report.contour).ok(), "client frame summary");
-        self.0.push_back(Entry {
-            world_id,
-            token,
-            at: now,
-            report,
-        });
+        self.by_session.insert(token.0, Entry { at: now, report });
         Ok(())
     }
+
     pub(crate) fn recent(&self, world_id: u64) -> serde_json::Value {
+        if self.world_id != world_id {
+            return serde_json::json!([]);
+        }
+        let now = Instant::now();
+        let mut entries: Vec<_> = self
+            .by_session
+            .values()
+            .filter(|entry| now.duration_since(entry.at) < Duration::from_secs(120))
+            .collect();
+        entries.sort_unstable_by_key(|entry| entry.at);
         serde_json::to_value(
-            self.0
+            entries
                 .iter()
-                .filter(|e| e.world_id == world_id && e.at.elapsed() < Duration::from_secs(120))
-                .map(|e| &e.report)
+                .map(|entry| &entry.report)
                 .collect::<Vec<_>>(),
         )
         .unwrap_or_default()
