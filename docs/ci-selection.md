@@ -80,8 +80,10 @@ the manifest, the `select` outputs and `required` never list them. The only one 
   `rust-toolchain.toml`, `crates/harness/Cargo.toml` and `crates/harness/src/game_score`.
 - A path under `ignore` never runs it: the tests, benchmarks, examples and notes of those crates are not part of
   any build of the server.
-- The rule's `inputs` and the directories of the closure are also what the results cache hashes, so the list that
-  decides whether the game score runs is the list that decides whether a stored result is still true.
+- The rule's `inputs` and the directories of the closure are also what the results cache hashes, file by file and
+  less the files `ignore` names, so the list that decides whether the game score runs is the list that decides
+  whether a stored result is still true: a change to a test or a note of a game crate neither runs the check nor
+  changes the key.
 
 `make ci-explain` prints one more line after the jobs: `game-score (make ship, not a CI job): runs because ...` or
 `skipped because ...`.

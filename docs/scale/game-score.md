@@ -175,13 +175,17 @@ in a child process of its own.
 One folder serves every worktree of a checkout and every container: `aoe-game-score`
 in the common Git directory, beside `aoe-cargo`. The Makefile already mounts that
 directory in every container (it is where `aoe-cargo` lives), and Git never tracks it.
-`AOE_GAME_SCORE_HOME` names another one.
+Under `make` this is the only home: the containers mount the checkout and the common Git
+directory and nothing else, and the goals do not pass `AOE_GAME_SCORE_HOME` to them. That
+variable names another home only for the harness binary run directly (the tests, a machine
+whose common directory is on a slow disk).
 
 ```text
 aoe-game-score/
   packages/            the map package: `make game-map` writes it, `make game-score` reads it
   results/<key>.json   the results cache, one entry per game state (see below)
   base/                the scratch worktree the merge base is built and played in
+  base.lock/           present while a ship uses base/ (see "The merge base" below)
 ```
 
 `make game-map` and `make game-score` use `packages` by default; `--package-directory`
@@ -222,15 +226,23 @@ make ci-explain             # says "game-score (make ship, not a CI job): runs b
    dependencies are compiled).
 3. **The merge base, without paying for it every time.** The `service` numbers are a function
    of the game's code, the map and the scenarios, so a result is stored under a hash of
-   exactly those, not under a commit: the Git tree of every crate in the build closure of the
-   server and of `crates/harness/src/game_score` (scenarios, counters, report schema), the
-   blobs of `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml` and `crates/harness/Cargo.toml`,
-   the map hash and the report schema. Two commits with the same game code share one entry. A
-   run of a branch stores its own entry (unless the working tree differs from HEAD, or the runs
-   disagreed); the merge base is played only when no entry has its key. On that miss the
-   persistent scratch worktree `base/` moves to the merge base (a detached checkout), builds
-   it incrementally and plays it at one worker, both scenarios at once, then stores it. If the
-   merge base cannot be built, ship says so in one line and shows the branch's numbers alone.
+   exactly those, not under a commit: every file (path and Git object id) of every crate in the
+   build closure of the server and of `crates/harness/src/game_score` (scenarios, counters,
+   report schema), `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml` and
+   `crates/harness/Cargo.toml`, the map hash and the report schema, less the files the `ignore`
+   globs of the rule name (tests, benches, examples and `.md` files of a crate): a change to
+   those does not run the check, so it cannot change the key either. Two commits with the same
+   game code share one entry. A run of a branch stores its own entry (unless the working tree
+   differs from HEAD in a file that counts, or the runs disagreed); the merge base is played only
+   when no entry has its key. On that miss the persistent scratch worktree `base/` moves to the
+   merge base (a detached checkout), builds it incrementally and plays it at one worker, both
+   scenarios at once, then stores it. One ship at a time uses `base/`: it holds the lock
+   `base.lock/` (a directory made atomically, with a heartbeat file a live holder touches every
+   5 s; a lock whose heartbeat is 60 s old belongs to a dead process and is taken over). A second
+   ship waits up to 15 min, looks in the cache again when it gets the lock (the first one stored
+   the entry it was after, most of the time) and plays the merge base only if it is still
+   missing. If it waits longer, or the merge base cannot be built, ship says so in one line and
+   shows the branch's numbers alone.
 4. **The comparison.** A table per scenario: number, merge base, this branch, change.
    `service` numbers are compared exactly. A number that changed is a row (those the table
    names first, the rest collapsed under them); the others are a count ("93 numbers

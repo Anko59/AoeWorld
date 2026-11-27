@@ -13,7 +13,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-/// Names another home (tests, a machine with the common directory on a slow disk).
+/// Names another home for the harness binary run directly (the tests). The `make` goals do not
+/// pass it to their containers, which mount only the checkout and the common Git directory: under
+/// `make` the home is always the one in the common Git directory.
 pub(crate) const ENV: &str = "AOE_GAME_SCORE_HOME";
 const FOLDER: &str = "aoe-game-score";
 

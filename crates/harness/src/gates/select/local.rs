@@ -16,6 +16,16 @@ pub(crate) struct LocalDecision {
     /// The tracked paths whose content decides the check's result: the directories of the
     /// workspace crates in the closure, then the rule's own inputs. Sorted, without duplicates.
     pub(crate) inputs: Vec<String>,
+    /// The rule's `ignore` globs: a file they name does not run the check, so it is not part of
+    /// what the result depends on either.
+    ignore: Vec<String>,
+}
+
+impl LocalDecision {
+    /// Whether the rule ignores `path`.
+    pub(crate) fn ignores(&self, path: &str) -> bool {
+        any(&self.ignore, path)
+    }
 }
 
 /// The workspace crates a build of the rule's subjects compiles, by name.
@@ -93,6 +103,7 @@ fn decide_one(rule: &LocalRule, graph: &Graph, paths: &[String]) -> LocalDecisio
         runs,
         reason,
         inputs,
+        ignore: rule.ignore.clone(),
     }
 }
 

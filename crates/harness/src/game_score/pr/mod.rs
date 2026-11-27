@@ -34,10 +34,17 @@ use std::{
     fs,
     path::{Path, PathBuf},
     process::Command,
-    time::{Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 const CHECK: &str = "game-score";
+/// How long a merge base waits for the scratch worktree another ship is using: about the time that
+/// ship needs for its own merge base.
+const WAIT: Duration = if cfg!(test) {
+    Duration::from_millis(400)
+} else {
+    Duration::from_secs(15 * 60)
+};
 const SCHEMA: u32 = 1;
 
 #[derive(Args, Debug, Clone)]
@@ -169,7 +176,8 @@ pub(super) fn plan(root: &Path, options: &Options) -> Result<Plan, BoxError> {
     };
     let head = git(root, &["rev-parse", "HEAD"])?;
     let base = merge_base(root, &options.base)?;
-    let objects = |rev: &str| key::Inputs::read(root, rev, &map_hash, &decision.inputs);
+    let ignored = |path: &str| decision.ignores(path);
+    let objects = |rev: &str| key::Inputs::read(root, rev, &map_hash, &decision.inputs, &ignored);
     let description = match &options.description {
         Some(path) => fs::read_to_string(path)
             .map_err(|error| format!("description {}: {error}", path.display()))?,
@@ -180,7 +188,7 @@ pub(super) fn plan(root: &Path, options: &Options) -> Result<Plan, BoxError> {
         home,
         branch_key: objects("HEAD")?.key(),
         base_key: objects(&base)?.key(),
-        dirty: key::dirty(root, &decision.inputs)?,
+        dirty: key::dirty(root, &decision.inputs, &ignored)?,
         head,
         base,
         map_hash,
@@ -292,6 +300,24 @@ fn base_side(
 ) -> (Option<Value>, render::Source) {
     let results = home::results(&run.home);
     let started = Instant::now();
+    if let Some(entry) = cache::load(&results, &run.base_key) {
+        let (report, source) = cached(entry, started.elapsed().as_secs_f64());
+        return (Some(report), source);
+    }
+    // The scratch worktree is shared by every checkout: one merge base at a time. Whoever held it
+    // may have stored the entry this run is after.
+    let _held = match base::lock(&run.home, WAIT) {
+        Ok(held) => held,
+        Err(error) => {
+            return (
+                None,
+                render::Source::Unavailable(format!(
+                    "the merge base {} could not be played: {error}",
+                    &run.base[..12.min(run.base.len())]
+                )),
+            );
+        }
+    };
     if let Some(entry) = cache::load(&results, &run.base_key) {
         let (report, source) = cached(entry, started.elapsed().as_secs_f64());
         return (Some(report), source);

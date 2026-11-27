@@ -157,6 +157,28 @@ fn the_inputs_are_the_closure_of_the_server_and_the_rules_own_list() {
 }
 
 #[test]
+fn the_decision_carries_the_ignored_files_so_the_key_of_a_result_leaves_them_out() {
+    let decision = decision(&["crates/ai/src/lib.rs"]);
+    for path in [
+        "crates/ai/tests/it.rs",
+        "crates/simulation/benches/speed.rs",
+        "crates/server/examples/demo.rs",
+        "crates/ai/README.md",
+        "crates/ai/src/notes.md",
+    ] {
+        assert!(decision.ignores(path), "{path}");
+    }
+    for path in [
+        "crates/ai/src/lib.rs",
+        "crates/ai/Cargo.toml",
+        "Cargo.lock",
+        "crates/harness/src/game_score/mod.rs",
+    ] {
+        assert!(!decision.ignores(path), "{path}");
+    }
+}
+
+#[test]
 fn the_rule_names_workspace_crates_and_tracked_inputs() {
     let rules = rules();
     let rule = &rules.local_checks["game-score"];

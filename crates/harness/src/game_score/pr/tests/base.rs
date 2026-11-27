@@ -278,3 +278,65 @@ fn no_code_of_the_game_score_asks_git_to_prune_repair_or_collect_worktrees() {
         }
     }
 }
+
+fn lock_in(home: &Path, wait_ms: u64) -> Result<Guard, BoxError> {
+    lock(home, Duration::from_millis(wait_ms))
+}
+
+#[test]
+fn a_second_ship_waits_for_the_scratch_worktree_and_gives_up_with_a_sentence() {
+    let home = tempfile::tempdir().expect("home");
+    let held = lock_in(home.path(), 5_000).expect("free");
+    let started = Instant::now();
+    let error = lock_in(home.path(), 300)
+        .err()
+        .expect("the first ship holds it");
+    assert!(started.elapsed() >= Duration::from_millis(300));
+    assert!(
+        error
+            .to_string()
+            .starts_with("another ship has used the scratch worktree for"),
+        "{error}"
+    );
+    drop(held);
+}
+
+#[test]
+fn it_is_taken_as_soon_as_the_holder_lets_go_and_the_lock_leaves_nothing_behind() {
+    let home = tempfile::tempdir().expect("home");
+    let held = lock_in(home.path(), 5_000).expect("free");
+    let waiter = thread::spawn({
+        let path = home.path().to_owned();
+        move || lock_in(&path, 10_000).map(drop).is_ok()
+    });
+    thread::sleep(Duration::from_millis(150));
+    drop(held);
+    assert!(waiter.join().expect("waiter"), "taken once it was free");
+    assert!(!home.path().join("base.lock").exists());
+}
+
+#[test]
+fn a_lock_whose_holder_died_is_taken_over() {
+    let home = tempfile::tempdir().expect("home");
+    let dead = home.path().join("base.lock");
+    fs::create_dir_all(&dead).expect("lock");
+    fs::write(dead.join("beat"), "999999").expect("beat");
+    fs::File::options()
+        .write(true)
+        .open(dead.join("beat"))
+        .expect("open")
+        .set_modified(SystemTime::UNIX_EPOCH)
+        .expect("a heartbeat from long ago");
+    lock_in(home.path(), 2_000).expect("taken over");
+}
+
+#[test]
+fn a_live_holder_keeps_its_lock_however_long_it_works() {
+    let home = tempfile::tempdir().expect("home");
+    let held = lock_in(home.path(), 5_000).expect("free");
+    // Longer than a lock is stale without a heartbeat: the heartbeat is what keeps it.
+    thread::sleep(STALE * 2);
+    assert!(lock_in(home.path(), 100).is_err(), "not taken over");
+    drop(held);
+    lock_in(home.path(), 2_000).expect("free again");
+}

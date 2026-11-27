@@ -201,6 +201,78 @@ fn a_hit_for_the_merge_base_plays_only_the_branch() {
     );
 }
 
+fn base_entry(report: Value) -> cache::Entry {
+    cache::Entry {
+        key: "base-key".to_owned(),
+        revision: "b".repeat(40),
+        stored_at: unix_now(),
+        workers: vec![1],
+        build_seconds: 10.0,
+        play_seconds: 60.0,
+        report,
+    }
+}
+
+#[test]
+fn a_merge_base_another_ship_is_playing_is_waited_for_and_then_found_in_the_cache() {
+    let home = tempfile::tempdir().expect("home");
+    let other_ship = base::lock(home.path(), Duration::from_secs(5)).expect("the other ship");
+    let runner = Scripted::new(worse(), standard());
+    let outcome = std::thread::scope(|scope| {
+        scope.spawn(|| {
+            std::thread::sleep(Duration::from_millis(100));
+            cache::store(&home::results(home.path()), &base_entry(standard())).expect("stored");
+            drop(other_ship);
+        });
+        execute(&run_for(home.path()), &runner, &spread(1.0)).expect("outcome")
+    });
+    assert_eq!(
+        runner.base_calls.get(),
+        0,
+        "it was there when the lock came free"
+    );
+    assert!(
+        outcome.terminal.contains("merge base: cache hit in "),
+        "{}",
+        outcome.terminal
+    );
+}
+
+#[test]
+fn a_merge_base_that_waits_too_long_for_the_scratch_worktree_is_left_out_with_a_line() {
+    let home = tempfile::tempdir().expect("home");
+    let _other_ship = base::lock(home.path(), Duration::from_secs(5)).expect("the other ship");
+    let runner = Scripted::new(worse(), standard());
+    let outcome = execute(&run_for(home.path()), &runner, &spread(1.0)).expect("outcome");
+    assert_eq!(runner.base_calls.get(), 0, "it never touched the worktree");
+    assert!(
+        outcome
+            .terminal
+            .contains("merge base: not available (the merge base bbbbbbbbbbbb could not be played: another ship has used the scratch worktree for"),
+        "{}",
+        outcome.terminal
+    );
+    assert!(
+        outcome
+            .summary
+            .starts_with("informational: branch numbers only"),
+        "{}",
+        outcome.summary
+    );
+}
+
+#[test]
+fn a_miss_lets_the_scratch_worktree_go_when_it_is_done() {
+    let home = tempfile::tempdir().expect("home");
+    execute(
+        &run_for(home.path()),
+        &Scripted::new(worse(), standard()),
+        &spread(1.0),
+    )
+    .expect("outcome");
+    assert!(!home.path().join("base.lock").exists());
+}
+
 #[test]
 fn a_game_state_already_played_is_not_played_again() {
     let home = tempfile::tempdir().expect("home");

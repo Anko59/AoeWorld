@@ -13,6 +13,9 @@ use std::{
     fs,
     path::{Path, PathBuf},
     process::Command,
+    sync::mpsc::{self, RecvTimeoutError, Sender},
+    thread::{self, JoinHandle},
+    time::{Duration, Instant, SystemTime},
 };
 
 fn git(directory: &Path, args: &[&str]) -> Result<String, BoxError> {
@@ -61,6 +64,105 @@ fn ours(repo: &Path, home: &Path, checkout: &Path) -> Result<(), BoxError> {
         .into());
     }
     Ok(())
+}
+
+/// One merge base at a time: the scratch worktree is shared by every checkout of the repository,
+/// and a second ship that moves, cleans or builds it under the first would store the wrong
+/// numbers for everyone. The lock is a directory of the shared home, made atomically (`mkdir`
+/// answers the same in every container, whatever the file sharing does with `flock`), and its
+/// holder touches a heartbeat file while it lives: a lock whose heartbeat stopped belongs to a
+/// dead process and is taken over.
+const BEAT: Duration = if cfg!(test) {
+    Duration::from_millis(50)
+} else {
+    Duration::from_secs(5)
+};
+const STALE: Duration = if cfg!(test) {
+    Duration::from_millis(600)
+} else {
+    Duration::from_secs(60)
+};
+const POLL: Duration = if cfg!(test) {
+    Duration::from_millis(20)
+} else {
+    Duration::from_secs(2)
+};
+
+/// Held while the scratch worktree is in use; released when dropped.
+pub(super) struct Guard {
+    path: PathBuf,
+    /// Dropping it wakes the heartbeat thread, which then ends.
+    stop: Option<Sender<()>>,
+    beat: Option<JoinHandle<()>>,
+}
+
+fn beat_file(path: &Path) -> PathBuf {
+    path.join("beat")
+}
+
+/// A lock whose heartbeat is older than `STALE` (or that never had one for as long).
+fn stale(path: &Path) -> bool {
+    let modified = fs::metadata(beat_file(path))
+        .or_else(|_| fs::metadata(path))
+        .and_then(|meta| meta.modified());
+    modified.is_ok_and(|time| time.elapsed().is_ok_and(|age| age > STALE))
+}
+
+/// Waits up to `wait` for the scratch worktree, then gives up with a sentence.
+pub(super) fn lock(home: &Path, wait: Duration) -> Result<Guard, BoxError> {
+    fs::create_dir_all(home)?;
+    let path = home.join("base.lock");
+    let started = Instant::now();
+    loop {
+        match fs::create_dir(&path) {
+            Ok(()) => {
+                fs::write(beat_file(&path), std::process::id().to_string())?;
+                let (stop, stopped) = mpsc::channel::<()>();
+                let beat = {
+                    let path = path.clone();
+                    thread::spawn(move || {
+                        while stopped.recv_timeout(BEAT) == Err(RecvTimeoutError::Timeout) {
+                            let _ = fs::File::options()
+                                .write(true)
+                                .open(beat_file(&path))
+                                .and_then(|file| file.set_modified(SystemTime::now()));
+                        }
+                    })
+                };
+                return Ok(Guard {
+                    path,
+                    stop: Some(stop),
+                    beat: Some(beat),
+                });
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                if stale(&path) {
+                    let _ = fs::remove_dir_all(&path);
+                    continue;
+                }
+                if started.elapsed() >= wait {
+                    return Err(format!(
+                        "another ship has used the scratch worktree for {} s",
+                        started.elapsed().as_secs()
+                    )
+                    .into());
+                }
+                thread::sleep(POLL);
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+}
+
+impl Drop for Guard {
+    fn drop(&mut self) {
+        drop(self.stop.take());
+        if let Some(beat) = self.beat.take() {
+            let _ = beat.join();
+        }
+        let _ = fs::remove_file(beat_file(&self.path));
+        let _ = fs::remove_dir(&self.path);
+    }
 }
 
 /// Whether `checkout` is a live worktree of the repository at `repo`: its `.git` is the file a
