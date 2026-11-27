@@ -341,6 +341,7 @@ pub(super) fn sites(
 }
 
 impl GameWorld {
+    #[cfg(test)]
     fn poll_vassal_plan(&mut self, id: EntityId) {
         let pending = self
             .economy
@@ -353,6 +354,14 @@ impl GameWorld {
             return;
         };
         let result = pending.poll(self);
+        self.finish_vassal_poll(id, pending, result);
+    }
+    fn finish_vassal_poll(
+        &mut self,
+        id: EntityId,
+        pending: super::road_job::Planner,
+        result: Option<Vec<Site>>,
+    ) {
         if let Some(d) = self.economy.vassals.domains.get_mut(&id) {
             if let Some(roads) = result {
                 self.economy.vassals.planning.remove(&id);
@@ -365,6 +374,10 @@ impl GameWorld {
             }
         }
     }
+    /// Every planning domain's road search takes its step at once on workers
+    /// (each reads the world, writes only its own planner); results land in
+    /// domain order (#978: one after another they were 209M of R1's 1,453M
+    /// main-thread instructions a tick once Vassals were uncapped).
     pub(super) fn advance_vassal_plans(&mut self) {
         let active = self
             .economy
@@ -373,8 +386,32 @@ impl GameWorld {
             .iter()
             .copied()
             .collect::<Vec<_>>();
-        for id in active {
-            self.poll_vassal_plan(id);
+        let mut polls = active
+            .into_iter()
+            .map(|id| {
+                let pending = self
+                    .economy
+                    .vassals
+                    .domains
+                    .get_mut(&id)
+                    .and_then(|d| d.pending.take());
+                (id, pending, None)
+            })
+            .collect::<Vec<_>>();
+        {
+            let world = &*self;
+            crate::game_world::parallel::par_each_mut(&mut polls, |(_, pending, result)| {
+                if let Some(pending) = pending {
+                    *result = pending.poll(world);
+                }
+            });
+        }
+        for (id, pending, result) in polls {
+            let Some(pending) = pending else {
+                self.economy.vassals.planning.remove(&id);
+                continue;
+            };
+            self.finish_vassal_poll(id, pending, result);
         }
     }
     #[cfg(test)]
