@@ -296,8 +296,10 @@ impl GameWorld {
         let (order, route) = (old.order.take(), std::mem::take(&mut old.route));
         let (planning, since, fast) =
             (old.state.planning, old.planning_since, old.fast_route_tried);
+        let issuer = old.route_issuer.take();
         let new = &mut self.units[at];
         new.order = order;
+        new.route_issuer = issuer;
         new.route = route;
         new.state.planning = planning;
         new.planning_since = since;

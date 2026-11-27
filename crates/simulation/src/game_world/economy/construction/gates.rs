@@ -177,10 +177,11 @@ impl GameWorld {
         let footprint = TileRect::from_xywh(origin.x, origin.y, r.depth, r.side);
         self.validate_explored_footprint(player, footprint)?;
         self.validate_footprint_ground(player, footprint)?;
+        self.validate_foundation_reach(player, &builders, footprint)?;
         let id = self.insert_building(player, kind, footprint, false)?;
         self.charge(player, cost);
         self.step_builders_aside(&builders, id);
-        if builders.is_empty() {
+        if builders.is_empty() || self.foreign_foundation_blocker(id) {
             self.queue_foundations(&[id], None);
         } else if !self.assign_build_orders(&builders, &[id], queued) {
             let _ = self.issue_cancel_construction(player, id);

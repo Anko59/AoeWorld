@@ -21,6 +21,33 @@ pub(crate) struct Stall {
 }
 
 impl GameWorld {
+    pub(in super::super) fn steward_note_failed_gather(
+        &mut self,
+        worker: EntityId,
+        tile: TileCoord,
+        kind: ResourceKind,
+    ) {
+        let Some((steward, unit)) = self.steward_controller(worker).zip(self.unit(worker)) else {
+            return;
+        };
+        if let Some(home) = self.economy.steward_homes.get_mut(&steward) {
+            let strikes = home
+                .stalls
+                .get(&worker)
+                .map_or(1, |s| s.strikes.saturating_add(1));
+            home.stalls.insert(
+                worker,
+                Stall {
+                    at: unit.position,
+                    since: self.tick.0,
+                    strikes,
+                    avoid_tile: Some(tile),
+                    avoid_kind: (strikes >= 2).then_some(kind),
+                },
+            );
+        }
+    }
+
     /// Visits only this domain's managed workers (at most 100) per pass.
     pub(super) fn steward_watchdog(&mut self, s: &Snapshot, changed: &mut Vec<EntityId>) {
         let now = self.tick.0;

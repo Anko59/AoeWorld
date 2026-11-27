@@ -41,7 +41,8 @@ impl GameWorld {
             return false;
         };
         task.retry_tick = self.tick.0 + u64::from(self.config.tick_hz);
-        let changed = self.replacement_resource_in(id, &mut task, true);
+        let tile = task.tile;
+        let changed = self.replacement_resource_in(id, &mut task, true, tile, false);
         self.economy.gatherers.insert(id, task);
         if changed {
             self.index_destination(id);
@@ -50,7 +51,31 @@ impl GameWorld {
     }
 
     pub(super) fn replacement_resource(&mut self, id: EntityId, task: &mut GatherTask) -> bool {
-        self.replacement_resource_in(id, task, false)
+        self.replacement_resource_in(id, task, false, task.tile, false)
+    }
+
+    pub(super) fn replacement_initial_resource(
+        &mut self,
+        id: EntityId,
+        task: &mut GatherTask,
+    ) -> bool {
+        // A refused click can redirect to a nearby alternative where the
+        // worker already stands. A distant, unreachable click leaves its job.
+        let nearby = !self.walking_resource_reachable(id, task.tile);
+        self.replacement_resource_in(id, task, false, task.tile, nearby)
+    }
+
+    pub(super) fn replacement_failed_resource(
+        &mut self,
+        id: EntityId,
+        task: &mut GatherTask,
+    ) -> bool {
+        let old = task.tile;
+        self.replacement_resource(id, task)
+            || self.unit(id).is_some_and(|unit| {
+                let from = unit.position.tile_floor();
+                from != old && self.replacement_resource_in(id, task, false, from, false)
+            })
     }
 
     fn replacement_resource_in(
@@ -58,6 +83,8 @@ impl GameWorld {
         id: EntityId,
         task: &mut GatherTask,
         direct: bool,
+        center: TileCoord,
+        nearby: bool,
     ) -> bool {
         let Some(unit) = self.unit(id) else {
             return false;
@@ -72,12 +99,13 @@ impl GameWorld {
             .filter(|b| b.player == unit.player && b.is_complete() && b.kind.accepts(task.kind))
             .map(|b| b.footprint);
         let radius = VILLAGE_RULES.replacement_radius_tiles;
-        // Stay in the old work area, even when the drop-off is far away. At
+        let radius_squared = (radius as u64).pow(2);
+        // Probe one work area at a time, even when the drop-off is far away. At
         // most (2r+1)^2 tiles and their cached resource blocks are inspected.
         let mut candidates: Vec<ResourceNode> = Vec::new();
         if let Terrain::Map { generator, overlay } = &self.terrain {
-            let low = TileCoord::new(task.tile.x - radius, task.tile.y - radius);
-            let high = TileCoord::new(task.tile.x + radius, task.tile.y + radius);
+            let low = TileCoord::new(center.x - radius, center.y - radius);
+            let high = TileCoord::new(center.x + radius, center.y + radius);
             for by in low.y.div_euclid(chunks::BLOCK_TILES)..=high.y.div_euclid(chunks::BLOCK_TILES)
             {
                 for bx in
@@ -92,7 +120,8 @@ impl GameWorld {
                                     && n.kind == task.kind
                                     && (n.kind != ResourceKind::Food
                                         || n.object == aoe_map::ObjectKind::ForageBush)
-                                    && distance_squared(n.tile, task.tile) <= (radius as u64).pow(2)
+                                    && distance_squared(n.tile, center) <= radius_squared
+                                    && (!nearby || distance_squared(n.tile, from) <= radius_squared)
                                     && overlay.resource_available(*n)
                                     && (self.economy.gatherers.count_target(WorkTarget::Node(n.id))
                                         - usize::from(reserved == Some(WorkTarget::Node(n.id))))
@@ -125,38 +154,9 @@ impl GameWorld {
         if candidates.is_empty() {
             return false;
         }
-        // A small flood from the last reached work spot certifies local tiles,
-        // even when the worker has just made a long trip to a Town Center.
-        // respecting terrain edges and building corners. No candidate behind
-        // a river or a closed wall can win just by being close to the camp.
-        let work = task
-            .work_tile
-            .filter(|tile| self.tile_passable(*tile))
-            .or_else(|| {
-                // A first order may come from across the map. Certify the
-                // clicked work area locally; route admission still starts at
-                // the actual worker, with the same eight-node bound.
-                perimeter(aoe_core::TileRect::from_xywh(
-                    task.tile.x,
-                    task.tile.y,
-                    1,
-                    1,
-                ))
-                .into_iter()
-                .filter(|tile| self.tile_passable(*tile))
-                .min_by_key(|tile| (distance_squared(from, *tile), tile.y, tile.x))
-            })
-            .unwrap_or(from);
-        let reachable = self.replacement_reach(unit.kind, work);
-        let seen = &reachable.tiles;
         let mut choices = candidates
             .into_iter()
-            .filter(|node| {
-                let rect = aoe_core::TileRect::from_xywh(node.tile.x, node.tile.y, 1, 1);
-                perimeter(rect)
-                    .iter()
-                    .any(|tile| seen.binary_search(tile).is_ok())
-            })
+            .filter(|node| self.walking_resource_reachable(id, node.tile))
             .take(8)
             .filter_map(|node| {
                 self.resource_work_spot(id, node.tile).map(|at| {
@@ -185,7 +185,7 @@ impl GameWorld {
             {
                 continue;
             }
-            if self.approach_resource_in(id, node.tile, Some(seen)).is_ok() {
+            if self.approach_resource_in(id, node.tile, true).is_ok() {
                 task.work_position = self
                     .movement_order(id)
                     .map(|o| o.destination)

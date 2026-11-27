@@ -36,3 +36,37 @@ fn members_keep_their_targets_while_the_carrier_waits_for_a_route() {
     let marching = targets(&mut w, false, 0);
     assert_ne!(marching, before);
 }
+
+#[test]
+fn route_failure_issuer_moves_with_a_formation_carrier() {
+    let mut world = GameWorld::new(WorldConfig::new(256, 256, aoe_core::Seed(1)).unwrap()).unwrap();
+    let player = PlayerId(0);
+    let ids = [20, 22].map(|x| {
+        world
+            .spawn_kind(
+                player,
+                UnitKind::Militia,
+                WorldPosition::new(x * 1024, 20 * 1024),
+            )
+            .unwrap()
+    });
+    world.with_order_issuer(crate::OrderIssuer::Player, |world| {
+        world
+            .issue_formation_move(
+                player,
+                &ids,
+                Formation::Line,
+                WorldPosition::new(120 * 1024, 20 * 1024),
+                false,
+                false,
+            )
+            .unwrap();
+    });
+    let carrier = world.units[world.lookup[&ids[0]]].formation.unwrap();
+    let replacement = ids.into_iter().find(|&id| id != carrier).unwrap();
+    world.hand_over_route(carrier, replacement);
+    assert_eq!(
+        world.units[world.lookup[&replacement]].route_issuer,
+        Some(crate::OrderIssuer::Player)
+    );
+}

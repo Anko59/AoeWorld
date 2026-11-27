@@ -5,6 +5,51 @@ use aoe_core::{Seed, WorldConfig};
 use std::collections::BTreeMap;
 
 #[test]
+fn paid_foundation_clears_friendly_bystanders_while_every_builder_is_busy() {
+    let mut world = GameWorld::new(WorldConfig::new(64, 64, Seed(1)).unwrap()).unwrap();
+    let player = PlayerId(0);
+    let active = world
+        .insert_building(
+            player,
+            BuildingKind::House,
+            TileRect::from_xywh(11, 10, 2, 2),
+            false,
+        )
+        .unwrap();
+    let worker = world
+        .spawn_villager(player, position(TileCoord::new(10, 10)).unwrap())
+        .unwrap();
+    world.economy.builders.insert(
+        worker,
+        BuildTask {
+            building: active,
+            attempts: 0,
+            queue: Vec::new(),
+        },
+    );
+    let tile = TileCoord::new(20, 20);
+    let at = position(tile).unwrap();
+    let bystander = world.spawn_militia(player, at).unwrap();
+    let queued = world
+        .insert_building(
+            player,
+            BuildingKind::House,
+            TileRect::from_xywh(tile.x, tile.y, 2, 2),
+            false,
+        )
+        .unwrap();
+    world.queue_foundations(&[queued], None);
+
+    let mut changed = Vec::new();
+    world.dispatch_construction(&mut changed);
+
+    assert_ne!(world.unit(bystander).unwrap().position, at);
+    assert_eq!(changed, [bystander]);
+    assert_eq!(world.economy.builders[&worker].building, active);
+    assert_eq!(world.economy.builders.assigned_count(queued), 0);
+}
+
+#[test]
 fn completion_membership_visits_only_builders_of_the_completed_sites() {
     let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(1)).unwrap()).unwrap();
     let mut completed = BTreeMap::new();

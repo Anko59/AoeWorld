@@ -5,6 +5,12 @@ use std::collections::BinaryHeap;
 /// Paid foundations a domain may keep in flight.
 const PIPELINE: usize = 24;
 
+#[derive(Debug)]
+pub(super) enum FoundationProgress {
+    Watching { done: u64, since: u64 },
+    Disconnected,
+}
+
 const RESERVE: Stockpile = Stockpile {
     food: 200,
     wood: 200,
@@ -114,33 +120,63 @@ impl GameWorld {
     }
 
     fn observe_vassal_progress(&mut self, id: EntityId, work: &super::work::Workload) {
-        let previous = self.economy.vassals.domains[&id].progress;
-        let Some((building, tile, done)) = work.open.iter().find_map(|(id, job)| {
-            if !previous.is_some_and(|(site, _, _)| site == *id)
-                && self.economy.builders.assigned_count(*id) == 0
-            {
-                return None;
-            }
-            self.building(*id).map(|b| (*id, job.tile, b.work_done))
-        }) else {
-            if let Some(domain) = self.economy.vassals.domains.get_mut(&id) {
-                domain.progress = None;
-            }
-            return;
-        };
         let tick = self.tick.0;
         let timeout = u64::from(self.config.tick_hz) * 60;
+        let buildings = &self.economy.buildings;
         let Some(domain) = self.economy.vassals.domains.get_mut(&id) else {
             return;
         };
-        match domain.progress {
-            Some((site, work, since)) if site == building && work == done => {
-                if tick.saturating_sub(since) >= timeout && !domain.refused.contains_key(&tile) {
-                    domain.refused.insert(tile, tick + 600);
-                    domain.request_replan(tick + plan::REFUSED_REPLAN_TICKS);
-                }
+        domain.progress.retain(|site, _| {
+            buildings
+                .get(site)
+                .is_some_and(|b| b.hp > 0 && !b.is_complete())
+        });
+        let scan = domain.reach_scan;
+        let in_sweep =
+            |site: EntityId| scan.is_some_and(|(last, end)| last < site && u64::from(site.0) < end);
+        let probe_key = |site| (!in_sweep(site), site);
+        let mut probe = None;
+        for &(site, job) in &work.open {
+            if matches!(
+                domain.progress.get(&site),
+                Some(FoundationProgress::Disconnected)
+            ) {
+                continue;
             }
-            _ => domain.progress = Some((building, done, tick)),
+            if self.economy.builders.assigned_count(site) > 0 {
+                domain.watch_foundation(&buildings[&site], tick, timeout);
+            } else if !domain.refused.contains_key(&job.tile)
+                && probe.is_none_or(|next| probe_key(site) < probe_key(next))
+            {
+                probe = Some(site);
+            }
+        }
+        // Bound the proof to one unstaffed site per visit. Building IDs give a
+        // stable order across replans. New IDs wait for the next sweep, so
+        // continuous construction cannot postpone the wrap to older sites.
+        let Some(site) = probe else {
+            return;
+        };
+        let b = &self.economy.buildings[&site];
+        let unreachable = self.validate_foundation_reach(b.player, &[], b.footprint)
+            == Err(EconomyError::Movement(crate::GameWorldError::Unreachable));
+        let occupied = !unreachable && self.foreign_foundation_blocker(site);
+        let Some(domain) = self.economy.vassals.domains.get_mut(&id) else {
+            return;
+        };
+        let end = scan
+            .filter(|_| in_sweep(site))
+            .map_or(self.next_entity_id, |(_, end)| end);
+        domain.reach_scan = Some((site, end));
+        if unreachable {
+            // Remember the proof for this paid foundation even when the
+            // tile's temporary placement refusal expires.
+            domain
+                .progress
+                .insert(site, FoundationProgress::Disconnected);
+            domain.refuse_foundation(b.footprint.min, tick);
+        } else if occupied || domain.progress.contains_key(&site) {
+            domain.watch_foundation(b, tick, timeout);
         }
     }
 
@@ -157,6 +193,20 @@ impl GameWorld {
         if open >= PIPELINE {
             return;
         }
+        // Leave work beside crews already building a line. On completion
+        // they can take the next segment without crossing the domain again.
+        let extensions: BTreeSet<_> = work
+            .open
+            .iter()
+            .filter(|(building, job)| {
+                (job.kind.is_wall() || job.kind == BuildingKind::Road)
+                    && self.economy.builders.assigned_count(*building) > 0
+            })
+            .flat_map(|(_, job)| {
+                [(0, -1), (-1, 0), (1, 0), (0, 1)]
+                    .map(|(dx, dy)| (job.kind, TileCoord::new(job.tile.x + dx, job.tile.y + dy)))
+            })
+            .collect();
         // Heapify the domain's current deficits once. Only pop as much work
         // as this pipeline can use, including successors to refused sites.
         #[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
@@ -164,6 +214,7 @@ impl GameWorld {
             focus: (bool, bool),
             threatened_tier: u8,
             new: bool,
+            separate_run: bool,
             cost_distance: u64,
             tier: u8,
             before_cursor: bool,
@@ -188,6 +239,7 @@ impl GameWorld {
                             focus: site.build_priority(focus),
                             threatened_tier: if threatened { site.tier } else { 0 },
                             new: !replacement,
+                            separate_run: !extensions.contains(&(site.kind, site.tile)),
                             cost_distance: distance
                                 + u64::from(site.kind.rules().build_seconds) * 4,
                             tier: site.tier,
@@ -295,6 +347,35 @@ impl GameWorld {
         }
         if let Some(d) = self.economy.vassals.domains.get_mut(&id) {
             d.status.wait = wait;
+        }
+    }
+}
+
+impl Domain {
+    fn watch_foundation(&mut self, building: &crate::GameBuilding, tick: u64, timeout: u64) {
+        let progress = self
+            .progress
+            .entry(building.id)
+            .or_insert(FoundationProgress::Watching {
+                done: building.work_done,
+                since: tick,
+            });
+        let FoundationProgress::Watching { done, since } = progress else {
+            return;
+        };
+        if *done != building.work_done {
+            *done = building.work_done;
+            *since = tick;
+        }
+        if tick.saturating_sub(*since) >= timeout {
+            self.refuse_foundation(building.footprint.min, tick);
+        }
+    }
+
+    fn refuse_foundation(&mut self, tile: TileCoord, tick: u64) {
+        if let std::collections::btree_map::Entry::Vacant(entry) = self.refused.entry(tile) {
+            entry.insert(tick + 600);
+            self.request_replan(tick + plan::REFUSED_REPLAN_TICKS);
         }
     }
 }

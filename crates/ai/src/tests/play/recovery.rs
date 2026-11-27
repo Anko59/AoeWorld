@@ -98,3 +98,40 @@ fn test_surplus_wood_can_fund_a_farm_after_the_first_barracks_is_ordered() {
         seat.orders
     );
 }
+
+#[test]
+fn a_stalled_foundation_is_restaffed_only_after_visible_blockers_leave() {
+    use crate::blackboard::Blackboard;
+    use crate::tests::fake::{enemy, with_context};
+    use aoe_sdk::{EntityId, Order, UnitKind};
+
+    let (units, mut buildings) = base(3);
+    buildings.push(Building {
+        complete: false,
+        progress: 0,
+        ..building(901, BuildingKind::House, (57, 50))
+    });
+    let mut world = FakeWorld::new(units, buildings);
+    world.tick = 1_000;
+    world.enemies.push(enemy(902, UnitKind::Militia, (58, 50)));
+    let mut board = Blackboard::default();
+    board.progress.insert(901, (0, 0));
+    let decide = |world: &FakeWorld, board: &mut Blackboard| {
+        let (result, seat) = with_context(world, &[], board, &Config::default(), |ctx| {
+            crate::play::constructor::step(ctx)
+        });
+        result.unwrap();
+        seat.orders.iter().any(|order| {
+            matches!(
+                order,
+                Order::Construct {
+                    building: EntityId(901),
+                    ..
+                }
+            )
+        })
+    };
+    assert!(!decide(&world, &mut board));
+    world.enemies[0].x += 2;
+    assert!(decide(&world, &mut board));
+}

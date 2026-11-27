@@ -390,6 +390,7 @@ impl GameWorld {
                     && attended.get(&b.id).copied().unwrap_or(0)
                         < builder_limit(b, starting_village)
                     && s.home.connects(from, b.footprint)
+                    && !self.foundation_has_blocker(b.id)
                     && matches!(
                         b.kind,
                         BuildingKind::House

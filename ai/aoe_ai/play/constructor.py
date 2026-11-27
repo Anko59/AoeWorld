@@ -118,12 +118,11 @@ class Constructor:
         self.production(ctx)
 
     def finish_foundations(self, ctx: Context) -> None:
-        """A foundation whose builder was lost, blocked or sent elsewhere stays
-        at its progress for ever: when none has advanced for a while, the
-        nearest free villager is ordered to construct it."""
+        """Restaff a stalled foundation when its footprint is clear."""
         mem = ctx.board
         stall = FOUNDATION_STALL_SECONDS * ctx.world.tick_hz
         alive = set()
+        occupied = None
         for b in ctx.buildings:
             if b.complete:
                 continue
@@ -134,6 +133,18 @@ class Constructor:
                 continue
             if ctx.tick - last[1] < stall or mem.cooling(f"finish:{b.id}", ctx.tick):
                 continue
+            if b.kind not in (BuildingKind.FARM, BuildingKind.ROAD):
+                if occupied is None:
+                    occupied = {
+                        unit.tile
+                        for group in (ctx.units, ctx.enemies)
+                        for unit in group
+                        if unit.alive
+                    }
+                if any((x, y) in occupied
+                       for x in range(b.x, b.x + b.width)
+                       for y in range(b.y, b.y + b.height)):
+                    continue
             builder = self.builder_near(ctx, b.center)
             if builder is None:
                 continue

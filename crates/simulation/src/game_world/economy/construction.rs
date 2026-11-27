@@ -10,8 +10,6 @@ use aoe_map::ResourceKind;
 
 /// Builders give up after this many failed approaches to one foundation.
 const MAX_APPROACH_ATTEMPTS: u8 = 6;
-/// Perimeter tiles one approach tries before reporting failure.
-const APPROACH_TILE_TRIES: usize = 6;
 
 mod clearance;
 mod continuation;
@@ -19,6 +17,7 @@ pub(crate) mod dispatch;
 mod foundations;
 mod jobs;
 mod progress;
+mod reachability;
 mod repair;
 mod sleep;
 pub(crate) use foundations::Foundations;
@@ -170,10 +169,13 @@ impl GameWorld {
         );
         self.validate_explored_footprint(player, footprint)?;
         self.validate_building_placement(player, kind, origin)?;
+        if kind != BuildingKind::FishTrap {
+            self.validate_foundation_reach(player, &builders, footprint)?;
+        }
         let id = self.insert_building(player, kind, footprint, false)?;
         self.charge(player, cost);
         self.step_builders_aside(&builders, id);
-        if builders.is_empty() {
+        if builders.is_empty() || self.foreign_foundation_blocker(id) {
             self.queue_foundations(&[id], None);
         } else if !self.assign_build_orders(&builders, &[id], queued) {
             let _ = self.issue_cancel_construction(player, id);
@@ -204,6 +206,9 @@ impl GameWorld {
         }
         if state.is_complete() && state.hp == state.max_hp {
             return Err(EconomyError::AlreadyComplete);
+        }
+        if self.foundation_has_blocker(building) {
+            return Err(EconomyError::InvalidFootprint);
         }
         if self.assign_builders(&builders, |_| building) {
             Ok(())
@@ -288,56 +293,6 @@ impl GameWorld {
             }
         }
         any
-    }
-
-    /// Walk to a tile beside `footprint`. `skip` rotates the candidate order so
-    /// that retries do not repeat a sealed tile that exhausted the path budget.
-    pub(super) fn approach_building(
-        &mut self,
-        id: EntityId,
-        footprint: TileRect,
-        skip: usize,
-    ) -> Result<(), crate::GameWorldError> {
-        let origin = self
-            .unit(id)
-            .ok_or(crate::GameWorldError::UnknownEntity)?
-            .position
-            .tile_floor();
-        let mut candidates = perimeter(footprint);
-        let ship = self
-            .unit(id)
-            .is_some_and(|u| u.kind == UnitKind::FishingShip);
-        candidates.retain(|tile| {
-            if ship {
-                self.unit_tile_passable(UnitKind::FishingShip, *tile, &|| false)
-                    .unwrap_or(false)
-            } else {
-                self.tile_passable(*tile)
-            }
-        });
-        candidates.sort_by_key(|tile| {
-            (
-                self.work_spot_busy(*tile, id),
-                distance_squared(origin, *tile),
-                tile.y,
-                tile.x,
-            )
-        });
-        if !candidates.is_empty() {
-            let by = skip % candidates.len();
-            candidates.rotate_left(by);
-        }
-        let mut failure = crate::GameWorldError::Unreachable;
-        // A few nearest tiles only: a tile sealed inside a palisade costs a
-        // full failed search, so the number of tries bounds the work.
-        for tile in candidates.into_iter().take(APPROACH_TILE_TRIES) {
-            match self.issue_task_move(id, position(tile)?) {
-                Ok(_) => return Ok(()),
-                Err(error @ crate::GameWorldError::Environment(_)) => return Err(error),
-                Err(error) => failure = error,
-            }
-        }
-        Err(failure)
     }
 
     fn release_builder(&mut self, id: EntityId) {
@@ -448,13 +403,19 @@ impl GameWorld {
                 }
                 continue;
             }
-            if attempts >= MAX_APPROACH_ATTEMPTS {
+            if attempts >= MAX_APPROACH_ATTEMPTS
+                || self.units[index].last_movement_error == Some(crate::GameWorldError::Unreachable)
+            {
                 self.next_queued_build(id);
                 continue;
             }
-            let walking = self
-                .approach_building(id, footprint, usize::from(attempts))
-                .is_ok();
+            let walking = match self.approach_building(id, footprint, usize::from(attempts)) {
+                Err(crate::GameWorldError::Unreachable) => {
+                    self.next_queued_build(id);
+                    continue;
+                }
+                result => result.is_ok(),
+            };
             if let Some(task) = self.economy.builders.get_mut(&id) {
                 task.attempts += 1;
             }
@@ -473,14 +434,23 @@ impl GameWorld {
             if self.building(building).is_some_and(|b| b.is_complete()) {
                 self.repair_building(building, count);
                 self.sleep_construction(building, count, false);
-            } else if self.foundation_occupied(building) {
-                // Units on the footprint are stepping aside; builders wait.
-                self.sleep_construction(building, count, true);
-            } else if let Some(state) = self.add_work(building, count) {
-                self.wake_construction(building);
-                completed.insert(building, state);
             } else {
-                self.sleep_construction(building, count, false);
+                match self.clear_foundation(building, &mut touched) {
+                    Some(clearance::Obstruction::Foreign) => {
+                        self.suspend_occupied_foundation(building, &mut touched);
+                    }
+                    Some(clearance::Obstruction::Clearing) => {
+                        self.sleep_construction(building, count, true);
+                    }
+                    None => {
+                        if let Some(state) = self.add_work(building, count) {
+                            self.wake_construction(building);
+                            completed.insert(building, state);
+                        } else {
+                            self.sleep_construction(building, count, false);
+                        }
+                    }
+                }
             }
             self.update_building_vision(building);
         }

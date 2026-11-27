@@ -2,7 +2,7 @@
 //! (`ai/aoe_ai/play/constructor.py`).
 use std::collections::BTreeSet;
 
-use aoe_sdk::{BuildingKind, EntityId, Order, ResourceKind, TileCoord, UnitTask};
+use aoe_sdk::{BuildingKind, EntityId, Order, ResourceKind, TileCoord, TileRect, UnitTask};
 
 use super::buildorder;
 use crate::blackboard::Plan;
@@ -173,25 +173,47 @@ pub fn step(ctx: &mut Context<'_>) -> Done {
     production(ctx, None)
 }
 
-/// A foundation whose builder was lost, blocked or sent elsewhere stays at its
-/// progress for ever: when none has advanced for a while, the nearest free
-/// villager is ordered to construct it.
+/// Restaff a stalled foundation when its footprint is clear.
 fn finish_foundations(ctx: &mut Context<'_>) -> Done {
     let stall = FOUNDATION_STALL_SECONDS * ctx.hz();
     let foundations: Vec<_> = ctx
         .buildings
         .iter()
         .filter(|b| !b.complete)
-        .map(|b| (b.id, b.progress, b.center(), b.kind))
+        .map(|b| {
+            (
+                b.id,
+                b.progress,
+                b.center(),
+                b.kind,
+                TileRect::from_xywh(b.x, b.y, b.width, b.height),
+            )
+        })
         .collect();
     let alive: BTreeSet<u32> = foundations.iter().map(|f| f.0).collect();
-    for (id, progress, center, kind) in foundations {
+    let mut occupied = None;
+    for (id, progress, center, kind, footprint) in foundations {
         let tick = ctx.tick;
         match ctx.board.progress.get(&id) {
             Some(last) if progress <= last.0 => {
                 let key = format!("finish:{id}");
                 if tick.saturating_sub(last.1) < stall || ctx.board.cooling(&key, tick) {
                     continue;
+                }
+                if !matches!(kind, BuildingKind::Farm | BuildingKind::Road) {
+                    let occupied = occupied.get_or_insert_with(|| {
+                        ctx.units
+                            .iter()
+                            .chain(&ctx.enemies)
+                            .filter(|unit| unit.alive)
+                            .map(Unit::tile)
+                            .collect::<BTreeSet<_>>()
+                    });
+                    if (footprint.min.x..footprint.max.x).any(|x| {
+                        (footprint.min.y..footprint.max.y).any(|y| occupied.contains(&(x, y)))
+                    }) {
+                        continue;
+                    }
                 }
                 let Some(builder) = builder_near(ctx, center) else {
                     continue;

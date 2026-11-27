@@ -3,9 +3,9 @@
 //! Rule (as in AoE2): a foundation may be placed over units. Units of the
 //! builder's player walk to the nearest free tile outside it by ordinary
 //! movement and construction waits at the edge until the footprint is clear.
-//! Units of other players are not ordered anywhere, so their presence keeps
-//! the foundation from progressing until they leave or die. A unit that cannot
-//! be routed off is placed on the nearest free tile instead.
+//! A foreign unit suspends the foundation and releases its crew. The plan
+//! remains available when the footprint clears. An assigned builder found
+//! inside its own foundation is placed on the nearest free work tile.
 use super::{BuildingKind, perimeter, position};
 use crate::GameWorld;
 use aoe_core::{EntityId, TileCoord, TileRect, WorldPosition};
@@ -32,25 +32,85 @@ fn overlaps(footprint: TileRect, u: &crate::GameUnit) -> bool {
     footprint.contains(u.position.tile_floor()) || dx * dx + dy * dy < r * r
 }
 
+pub(super) enum Obstruction {
+    Clearing,
+    Foreign,
+}
+
 impl GameWorld {
-    /// Pure predicate shared with the missed-wake detector.
-    #[cfg(test)]
+    /// A pending foundation is staffed only when its footprint is clear.
     pub(crate) fn foundation_has_blocker(&self, id: EntityId) -> bool {
-        let Some(b) = self.building(id) else {
+        self.foundation_blocker(id, false, None)
+    }
+
+    pub(in super::super) fn foreign_foundation_blocker(&self, id: EntityId) -> bool {
+        self.foundation_blocker(id, true, None)
+    }
+
+    /// A continuing builder may already touch its next work site.
+    pub(super) fn foundation_has_other_blocker(&self, id: EntityId, builder: EntityId) -> bool {
+        self.foundation_blocker(id, false, Some(builder))
+    }
+
+    fn foundation_blocker(
+        &self,
+        id: EntityId,
+        foreign_only: bool,
+        continuing: Option<EntityId>,
+    ) -> bool {
+        let Some(b) = self.economy.buildings.get(&id).filter(|b| !b.is_complete()) else {
             return false;
         };
         let Some(rect) = b.kind.collision_rect(b.footprint, false) else {
             return false;
         };
-        self.query(self.clamp_around(rect)).0.into_iter().any(|u| {
-            u.hp > 0
-                && overlaps(rect, &u)
-                && self
-                    .economy
-                    .builders
-                    .get(&u.id)
-                    .is_none_or(|job| job.building != id)
+        let around = self.clamp_around(rect);
+        if around.min.x >= around.max.x || around.min.y >= around.max.y {
+            return false;
+        }
+        let max = TileCoord::new(around.max.x - 1, around.max.y - 1);
+        [false, true].into_iter().any(|naval| {
+            self.collisions
+                .census_any(around.min, max, naval, |unit_id, _| {
+                    if Some(unit_id) == continuing {
+                        return false;
+                    }
+                    self.unit(unit_id).is_some_and(|u| {
+                        u.hp > 0
+                            && (!foreign_only || u.player != b.player)
+                            && overlaps(rect, &u)
+                            && !self.embarked(u.id)
+                            && self
+                                .economy
+                                .builders
+                                .get(&u.id)
+                                .is_none_or(|job| job.building != id)
+                    })
+                })
         })
+    }
+
+    pub(super) fn suspend_occupied_foundation(
+        &mut self,
+        id: EntityId,
+        changed: &mut Vec<EntityId>,
+    ) {
+        self.wake_construction(id);
+        self.economy.dispatch.sites.entry(id).or_insert(None);
+        if let Some(crew) = self.economy.builders.members.get(&id).cloned() {
+            for builder in crew {
+                if let Some(&index) = self.lookup.get(&builder) {
+                    self.stop_movement(index);
+                }
+                if !self.next_queued_build(builder)
+                    && self.economy.dispatch.lent.contains_key(&builder)
+                    && let Some(site) = self.building(id)
+                {
+                    self.after_building(builder, site.player, id, site.kind, site.footprint);
+                }
+                changed.push(builder);
+            }
+        }
     }
 
     /// Nearest free walkable tile outside `footprint` for `unit`, skipping
@@ -101,17 +161,19 @@ impl GameWorld {
         None
     }
 
-    /// Whether any unit still stands on the foundation. Idle units of the
-    /// foundation's owner are sent off it; builders re-approach by themselves.
-    pub(super) fn foundation_occupied(&mut self, building: EntityId) -> bool {
-        let Some(b) = self.building(building) else {
-            return false;
-        };
+    /// Move friendly bystanders off the footprint and report obstructions.
+    pub(super) fn clear_foundation(
+        &mut self,
+        building: EntityId,
+        changed: &mut Vec<EntityId>,
+    ) -> Option<Obstruction> {
+        let b = self.economy.buildings.get(&building)?;
+        if b.is_complete() {
+            return None;
+        }
         let owner = b.player;
-        // Walkable kinds (farms, open gates) never trap or stall anyone.
-        let Some(footprint) = b.kind.collision_rect(b.footprint, false) else {
-            return false;
-        };
+        // Walkable kinds such as farms and roads never block construction.
+        let footprint = b.kind.collision_rect(b.footprint, false)?;
         let inside = self
             // Corpses neither block a foundation nor get walked off it.
             .living_units_on_tiles(self.clamp_around(footprint))
@@ -145,8 +207,13 @@ impl GameWorld {
                 }
             }
             self.slide_toward(unit.id, at, footprint);
+            changed.push(unit.id);
         }
-        !inside.is_empty()
+        if inside.iter().any(|u| u.player != owner) {
+            Some(Obstruction::Foreign)
+        } else {
+            (!inside.is_empty()).then_some(Obstruction::Clearing)
+        }
     }
 
     /// A builder found on its own foundation (it was pushed there) is set on

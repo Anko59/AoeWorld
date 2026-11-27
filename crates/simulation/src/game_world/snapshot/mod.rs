@@ -266,7 +266,11 @@ impl GameWorld {
         self.restore_resource_memory(&snapshot.resource_memory);
         self.set_fog_disabled(snapshot.fog_disabled);
         probe(RestorePhase::FogAndVision);
+        // Reissuing a saved job reconstructs its route, but the original issuer
+        // is absent from the save.
+        self.order_diagnostics.restoring_jobs = true;
         self.resume_jobs(&snapshot, &mut report);
+        self.order_diagnostics.restoring_jobs = false;
         self.rebind_trade_units();
         probe(RestorePhase::JobsAndOrders);
         for player in &snapshot.players {

@@ -196,7 +196,14 @@ impl GameWorld {
             else {
                 continue;
             };
-            let walking = self.approach_building(builder, footprint, 0).is_ok();
+            if self.foundation_has_other_blocker(target, builder) {
+                self.economy.dispatch.sites.entry(target).or_insert(None);
+                continue;
+            }
+            let walking = match self.approach_building(builder, footprint, 0) {
+                Err(crate::GameWorldError::Unreachable) => continue,
+                result => result.is_ok(),
+            };
             self.economy.builders.insert(
                 builder,
                 BuildTask {
@@ -226,7 +233,6 @@ impl GameWorld {
             self.steward_controller(builder)
         };
         let mut candidates = self.economy.foundations.nearest(player, from);
-        let mut nearest = None;
         while let Some(target) = candidates.next(&self.economy.foundations) {
             let Some(building) = self.building(target).filter(|b| !b.is_complete()) else {
                 continue;
@@ -234,27 +240,16 @@ impl GameWorld {
             if (building.kind == BuildingKind::FishTrap) != fishing
                 || self.economy.builders.assigned_count(target)
                     >= self.automatic_builder_limit(&building)
+                || self.foundation_has_other_blocker(target, builder)
                 || steward.is_some_and(|id| {
                     !self.economy.steward_homes[&id].connects(from, building.footprint)
                 })
             {
                 continue;
             }
-            nearest.get_or_insert(target);
             if self.assign_builders(&[builder], |_| target) {
                 return true;
             }
-        }
-        if let Some(target) = nearest {
-            self.economy.builders.insert(
-                builder,
-                BuildTask {
-                    building: target,
-                    attempts: 1,
-                    queue: Vec::new(),
-                },
-            );
-            return true;
         }
         false
     }
@@ -300,7 +295,11 @@ impl GameWorld {
                 ResourceKind::Stone,
             ]
             .into_iter()
-            .filter_map(|resource| self.nearest_resource(origin, resource, radius, None))
+            .filter_map(|resource| {
+                self.nearest_resource_matching(origin, resource, radius, None, |node| {
+                    self.walking_resource_reachable(builder, node.tile)
+                })
+            })
             .collect::<Vec<_>>();
             nodes.sort_unstable_by_key(|node| (distance_squared(origin, node.tile), node.id));
             for node in nodes {
@@ -321,7 +320,10 @@ impl GameWorld {
             _ => &[],
         };
         for resource in wanted {
-            if let Some(node) = self.nearest_resource(footprint.min, *resource, radius, None)
+            if let Some(node) =
+                self.nearest_resource_matching(footprint.min, *resource, radius, None, |node| {
+                    self.walking_resource_reachable(builder, node.tile)
+                })
                 && self.issue_gather(player, builder, node.id).is_ok()
             {
                 return;

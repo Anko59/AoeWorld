@@ -51,6 +51,7 @@ const SHARED_ORIGINS: usize = 64;
 /// Base tiles keep a two-tile halo. Water kinds keep seven more: the depth
 /// scan of a water tile reads water up to seven tiles away.
 const WATER_HALO: i64 = shore::DEPTH_REACH as i64;
+const CHUNK_HALO: i32 = 2;
 
 /// The per-tile tables of a memo, owned by one query or lent by a thread.
 pub(super) struct Tables<const N: usize, const W: usize> {
@@ -93,6 +94,7 @@ pub(super) struct Memo<'a, const N: usize, const W: usize> {
     /// A point query asks the source whether any water is in reach before
     /// sampling its neighbors; a chunk shares those samples between tiles.
     probe_reach: bool,
+    dry_provenance: Option<crate::terrain::Provenance>,
     tables: Hold<'a, Tables<N, W>>,
 }
 
@@ -118,6 +120,7 @@ impl<'a> PointMemo<'a> {
             side: 5,
             cancelled,
             probe_reach: true,
+            dry_provenance: None,
             tables: Hold::Own(Tables::new(generator)),
         }
     }
@@ -142,6 +145,7 @@ impl<'a> SharedMemo<'a> {
             side: i64::from(SHARED_SIDE),
             cancelled,
             probe_reach: true,
+            dry_provenance: None,
             tables: Hold::Lent(tables),
         }
     }
@@ -155,10 +159,14 @@ impl<'a> ChunkMemo<'a> {
     ) -> Self {
         Self {
             generator,
-            origin: TileCoord::new(origin.x.saturating_sub(2), origin.y.saturating_sub(2)),
-            side: i64::from(CHUNK_TILES) + 4,
+            origin: TileCoord::new(
+                origin.x.saturating_sub(CHUNK_HALO),
+                origin.y.saturating_sub(CHUNK_HALO),
+            ),
+            side: i64::from(CHUNK_TILES + 2 * CHUNK_HALO),
             cancelled,
             probe_reach: false,
+            dry_provenance: shore::dry_chunk_provenance(generator, origin, cancelled),
             tables: Hold::Own(Tables::new(generator)),
         }
     }

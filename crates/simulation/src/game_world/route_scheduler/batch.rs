@@ -349,10 +349,16 @@ impl GameWorld {
             self.cache_route(&planner, kind, player, &MovementOutcome::Unreachable);
         }
         self.route_metrics.failed(planner.work());
-        let caller = self.units[index].route_caller;
-        self.route_metrics
-            .attribution
-            .failed(kind, from, to, planner.work(), reason, caller);
+        let unit = &self.units[index];
+        self.route_metrics.attribution.failed(
+            kind,
+            from,
+            to,
+            planner.work(),
+            reason,
+            unit.route_caller,
+            unit.route_issuer,
+        );
         if self.units[index].formation == Some(id) {
             let nearest = planner.nearest_reachable();
             self.group_route_failed(index, error, reason, nearest, changed);

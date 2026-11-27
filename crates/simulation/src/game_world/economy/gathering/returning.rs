@@ -192,6 +192,7 @@ impl GameWorld {
     pub(super) fn resume_resource(&mut self, id: EntityId, task: &mut GatherTask) -> bool {
         if task.animal.is_some() {
             if self.task_remaining(task).is_some_and(|left| left > 0)
+                && self.walking_resource_reachable(id, task.tile)
                 && self.resource_has_work_spot(id, task.tile)
             {
                 return self.restart_approach(id, task);
@@ -214,28 +215,18 @@ impl GameWorld {
             if task.fish.is_none() {
                 return self.replacement_resource(id, task);
             }
-            let Some(next) = (if task.fish.is_some() {
-                self.nearest_fish(id, task.tile, task.node)
-            } else {
-                self.nearest_resource_matching(
-                    task.tile,
-                    task.kind,
-                    super::super::VILLAGE_RULES.replacement_radius_tiles,
-                    Some(task.node),
-                    |n| {
-                        self.managed_target_allowed(
-                            id,
-                            position(n.tile).unwrap_or(aoe_core::WorldPosition::new(0, 0)),
-                        )
-                    },
-                )
-            }) else {
-                return false;
-            };
-            task.node = next.id;
-            task.tile = next.tile;
-            task.fish = self.fish_object(next.id);
+            return self.replacement_fish(id, task);
         }
+        self.restart_approach(id, task)
+    }
+
+    pub(super) fn replacement_fish(&mut self, id: EntityId, task: &mut GatherTask) -> bool {
+        let Some(next) = self.nearest_fish(id, task.tile, task.node) else {
+            return false;
+        };
+        task.node = next.id;
+        task.tile = next.tile;
+        task.fish = self.fish_object(next.id);
         self.restart_approach(id, task)
     }
 

@@ -35,8 +35,6 @@ pub(super) struct Snapshot {
     pub farm_first: bool,
     /// Only reused within this authoritative pass; accepted jobs retain state.
     pub offers: [Vec<aoe_map::ResourceNode>; 4],
-    /// Exhausted ore probes are shared by workers for this pass only.
-    pub ore_misses: [bool; 4],
     /// Per-visit memos of the job search, dropped whenever a job is given
     /// (`forget_jobs`): builders per building, idle unloaded villagers with
     /// their tiles, and the starting-village rule.
@@ -267,7 +265,6 @@ impl GameWorld {
             avoid: None,
             farm_first: false,
             offers: Default::default(),
-            ore_misses: [false; 4],
             attendance: None,
             helpers: None,
             starting_village: None,

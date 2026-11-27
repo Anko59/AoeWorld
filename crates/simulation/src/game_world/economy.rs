@@ -374,8 +374,6 @@ pub(crate) struct GatherTask {
     carcass_kind: Option<crate::AnimalKind>,
     fish: Option<aoe_map::ObjectKind>,
     tile: TileCoord,
-    /// Last reached work spot: certifies the local area after a long return.
-    work_tile: Option<TileCoord>,
     pub(crate) work_position: Option<aoe_core::WorldPosition>,
     kind: ResourceKind,
     phase: GatherPhase,

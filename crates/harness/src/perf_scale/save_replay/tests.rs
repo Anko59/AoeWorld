@@ -1,6 +1,20 @@
 use super::counts::summary;
 
 #[test]
+fn replay_report_has_distinct_rust_ai_and_unattributed_failure_counters() {
+    use aoe_core::{Seed, WorldConfig};
+    use aoe_simulation::GameWorld;
+    use std::collections::BTreeMap;
+
+    let world = GameWorld::new(WorldConfig::new(32, 32, Seed(1)).unwrap()).unwrap();
+    let report = super::orders::report(&world, &BTreeMap::new(), &[0; 8], 1);
+    let failures = report["route_failures_by_issuer"].as_object().unwrap();
+    assert_eq!(failures.len(), 9);
+    assert_eq!(failures["rust_ai"], 0);
+    assert_eq!(failures["unattributed"], 0);
+}
+
+#[test]
 fn instruction_summary_retains_zero_samples_and_raw_units() {
     let result = summary(&[30, 0, 20, 10]);
     assert_eq!(result["samples"], 4);

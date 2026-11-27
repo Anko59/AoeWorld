@@ -60,6 +60,7 @@ impl GameWorld {
         self.units[index].state.moving = true;
         self.units[index].state.planning = false;
         self.units[index].route = route;
+        self.units[index].route_issuer = self.current_route_issuer();
         self.units[index].order = Some(MovementOrder {
             origin,
             destination,

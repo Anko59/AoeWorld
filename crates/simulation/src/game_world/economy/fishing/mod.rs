@@ -33,6 +33,7 @@ impl GameWorld {
                     && (node.object == ObjectKind::ShoreFish
                         || (naval && node.object == ObjectKind::DeepFish))
                     && (distance, node.id) < score
+                    && self.walking_resource_reachable(worker, node.tile)
                 {
                     score = (distance, node.id);
                     nearest = Some(node);

@@ -15,6 +15,7 @@ mod road_search;
 mod roads;
 mod threat;
 mod work;
+use development::FoundationProgress;
 pub use work::{VassalFocus, VassalJob, VassalJobs};
 
 pub const VASSAL_LIMIT: usize = 20;
@@ -73,7 +74,9 @@ pub(crate) struct Domain {
     development: bool,
     cursor: usize,
     refused: BTreeMap<TileCoord, u64>,
-    progress: Option<(EntityId, u64, u64)>,
+    /// Last foundation probed and the exclusive building-ID limit of this sweep.
+    reach_scan: Option<(EntityId, u64)>,
+    progress: BTreeMap<EntityId, FoundationProgress>,
     status: VassalStatus,
     /// Cached plan (see `plan::REPLAN_TICKS`), its age and the tick it was made.
     plan: Vec<plan::Site>,
@@ -87,6 +90,7 @@ pub(crate) struct Domain {
     /// Where the latest raider was seen: the threatened side is walled first.
     hot: Option<TileCoord>,
 }
+
 impl Domain {
     fn request_replan(&mut self, at: u64) {
         self.replan_at = Some(self.replan_at.map_or(at, |earlier| earlier.min(at)));
@@ -157,7 +161,8 @@ impl GameWorld {
                 development: true,
                 cursor: 0,
                 refused: BTreeMap::new(),
-                progress: None,
+                reach_scan: None,
+                progress: BTreeMap::new(),
                 plan: Vec::new(),
                 paid: Vec::new(),
                 plan_age: crate::Age::Dark,

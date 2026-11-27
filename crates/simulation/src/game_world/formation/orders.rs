@@ -275,6 +275,7 @@ impl GameWorld {
     ) {
         let dx = i64::from(waypoint.x) - i64::from(origin.x);
         let dy = i64::from(waypoint.y) - i64::from(origin.y);
+        self.units[index].route_issuer = self.current_route_issuer();
         self.units[index].order = Some(MovementOrder {
             origin,
             destination,

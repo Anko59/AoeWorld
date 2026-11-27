@@ -53,6 +53,7 @@ impl GameWorld {
                             && self.visibility(player, a.position.tile_floor())
                                 != TileVisibility::Visible)
                         || !self.animal_has_work_slot(a.id, a.kind, worker)
+                        || !self.walking_resource_reachable(worker, a.position.tile_floor())
                         || !self.resource_has_work_spot(worker, a.position.tile_floor())
                     {
                         continue;

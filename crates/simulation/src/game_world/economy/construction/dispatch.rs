@@ -137,7 +137,16 @@ impl GameWorld {
         let tile = footprint.min;
         let need = self.automatic_builder_limit(&b);
         let assigned = self.economy.builders.assigned_count(id);
-        if assigned >= need || capacity == 0 {
+        if assigned >= need {
+            return (0, 0);
+        }
+        // An occupied site needs to clear even while all builders are busy.
+        // Otherwise builders continuing nearby skip it and never free a slot.
+        if self.foundation_has_blocker(id) {
+            self.clear_foundation(id, changed);
+            return (0, 0);
+        }
+        if capacity == 0 {
             return (0, 0);
         }
         let area =

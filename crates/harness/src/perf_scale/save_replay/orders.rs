@@ -1,5 +1,5 @@
-//! Order demand by issuer. Rates are per recorded tick; the counters start empty at restore,
-//! so cumulative values are the replay window's own.
+//! Order demand by issuer. Rates are per recorded tick. Cumulative counters
+//! can include route attempts made while restoring saved jobs.
 use aoe_simulation::{GameWorld, ISSUER_SPANS};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -44,6 +44,7 @@ pub(super) fn report(
         .collect();
     json!({
         "ticks": ticks, "issuers": issuers, "redundancy_sources": redundancy,
+        "route_failures_by_issuer": world.order_route_failures().into_iter().collect::<BTreeMap<_, _>>(),
         "commands_by_issuer_kind_result": commands,
         "issuer_spans": ISSUER_SPANS,
         "note": "recorded commands replay as python_ai (the human seat sent none); route_work is planner work units charged to the issuer of the unit's latest accepted order; mover census is units with an unfinished goal per tick by that issuer",

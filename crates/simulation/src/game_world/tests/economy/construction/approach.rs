@@ -111,3 +111,79 @@ fn a_builder_retries_an_occupied_work_tile_from_a_legal_fractional_arrival() {
     }
     panic!("the builder must retry another work tile and complete the house");
 }
+
+fn ring_around_house(world: &mut GameWorld, origin: TileCoord) -> Vec<EntityId> {
+    let mut walls = Vec::new();
+    for y in -2..=3 {
+        for x in -2..=3 {
+            if x == -2 || y == -2 || x == 3 || y == 3 {
+                walls.push(
+                    world
+                        .insert_building(
+                            PlayerId(0),
+                            BuildingKind::PalisadeWall,
+                            TileRect::from_xywh(origin.x + x, origin.y + y, 1, 1),
+                            true,
+                        )
+                        .unwrap(),
+                );
+            }
+        }
+    }
+    walls
+}
+
+#[test]
+fn foundation_placement_requires_a_reachable_villager_of_its_owner() {
+    let (mut world, _, _) = village();
+    let player = PlayerId(0);
+    let origin = at(100, 100);
+    fixture::survey(&mut world, player, origin, 8);
+    villager_at(&mut world, 95, 100);
+    let wall = ring_around_house(&mut world, origin)[2];
+    world
+        .spawn_villager(
+            PlayerId(1),
+            WorldPosition::from_tile_center(at(99, 100)).unwrap(),
+        )
+        .unwrap();
+    let before = world.canonical_hash();
+    assert_eq!(
+        world.issue_build(player, &[], BuildingKind::House, origin, false),
+        Err(EconomyError::Movement(crate::GameWorldError::Unreachable)),
+    );
+    assert_eq!(world.canonical_hash(), before);
+    world.remove_building(wall);
+    assert!(
+        world
+            .issue_build(player, &[], BuildingKind::House, origin, false)
+            .is_ok()
+    );
+}
+
+#[test]
+fn a_builder_releases_its_foundation_after_a_terminal_route_failure() {
+    let (mut world, _, _) = village();
+    let player = PlayerId(0);
+    let origin = at(100, 100);
+    let builder = villager_at(&mut world, 92, 100);
+    fixture::survey(&mut world, player, origin, 8);
+    let house = world
+        .issue_build(player, &[builder], BuildingKind::House, origin, false)
+        .unwrap();
+    ring_around_house(&mut world, origin);
+    let index = world.lookup[&builder];
+    world.stop_movement(index);
+    world.set_movement_error(index, Some(crate::GameWorldError::Unreachable));
+
+    world.advance();
+    assert!(
+        !world
+            .economy
+            .builders
+            .values()
+            .any(|task| task.building == house)
+    );
+    assert!(world.movement_order(builder).is_none());
+    assert_eq!(world.unit(builder).unwrap().task, UnitTask::Idle);
+}

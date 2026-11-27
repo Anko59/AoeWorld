@@ -38,7 +38,6 @@ impl GatherTask {
             animal: None,
             carcass_kind: None,
             fish: None,
-            work_tile: None,
             work_position: None,
             phase: GatherPhase::Approaching,
             approach_failures: 0,

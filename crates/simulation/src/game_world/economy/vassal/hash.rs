@@ -1,4 +1,5 @@
 use super::super::Economy;
+use super::FoundationProgress;
 impl Economy {
     pub(crate) fn hash_vassals(&self, h: &mut blake3::Hasher) {
         let m = &self.vassals;
@@ -32,11 +33,24 @@ impl Economy {
                 h.update(&unit.0.to_le_bytes());
             }
             h.update(&(d.cursor as u64).to_le_bytes());
-            h.update(&[u8::from(d.progress.is_some())]);
-            if let Some((site, work, since)) = d.progress {
+            h.update(&[u8::from(d.reach_scan.is_some())]);
+            if let Some((site, end)) = d.reach_scan {
                 h.update(&site.0.to_le_bytes());
-                h.update(&work.to_le_bytes());
-                h.update(&since.to_le_bytes());
+                h.update(&end.to_le_bytes());
+            }
+            h.update(&(d.progress.len() as u64).to_le_bytes());
+            for (site, progress) in &d.progress {
+                h.update(&site.0.to_le_bytes());
+                match progress {
+                    FoundationProgress::Watching { done, since } => {
+                        h.update(&[0]);
+                        h.update(&done.to_le_bytes());
+                        h.update(&since.to_le_bytes());
+                    }
+                    FoundationProgress::Disconnected => {
+                        h.update(&[1]);
+                    }
+                }
             }
             h.update(&d.planned.to_le_bytes());
             h.update(&[u8::from(d.replan_at.is_some())]);
