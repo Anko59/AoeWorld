@@ -32,6 +32,22 @@ export class AoeWebGl {
         this.contextLostCount = 0;
         this.contextRestoredCount = 0;
         this.initialize();
+        const readPixels = gl.readPixels;
+        const readback = (...args) => {
+            readPixels.apply(gl, args);
+            // Client-memory readback can retire draws before fences are visible.
+            // Finish covers reads that GL rejected before transferring data.
+            if (ArrayBuffer.isView(args[6]) && this.pendingFrames.length) {
+                gl.finish();
+                for (const sync of this.pendingFrames) gl.deleteSync(sync);
+                this.pendingFrames.length = 0;
+                this.needsFrameValidation = true;
+            }
+        };
+        gl.readPixels = readback;
+        this.releaseReadback = () => {
+            if (gl.readPixels === readback) gl.readPixels = readPixels;
+        };
         this.onLost = event => { this.contextLostCount++; event.preventDefault(); };
         this.onRestored = () => {
             try {
@@ -55,7 +71,6 @@ export class AoeWebGl {
     }
     initialize() {
         const gl = this.gl;
-        // A restored context invalidates all sync objects from its lost lifetime.
         this.pendingFrames = [];
         this.frameError = null;
         this.waitingForStorage = false;
@@ -210,8 +225,7 @@ export class AoeWebGl {
         const code = this.gl.getError();
         if (code !== this.gl.NO_ERROR) throw new Error('WebGL2 graphics error ' + code);
     }
-    // getError() is one shared, destructive flag: an error seen while a submitted
-    // frame is unfinished belongs to it, so latch it for health polling.
+    // Latch errors belonging to unfinished frames for health polling.
     latchSubmittedError() {
         const code = this.pendingFrames.length ? this.gl.getError() : 0;
         if (code && !this.frameError) this.frameError = new Error('WebGL2 graphics error ' + code);
@@ -321,8 +335,7 @@ export class AoeWebGl {
             if (this.disposed || !this.gl.isContextLost()) throw error;
             this.atlasPages = pages;
         }
-        // Retain the complete Rust-owned source even if a context is lost
-        // during growth or upload. Restoration re-uploads all resident planes.
+        // Retain the complete Rust-owned source for context restoration.
         this.atlasPixels = pixels;
         this.atlasMemory = memory;
         this.atlasOffset = pixels.byteOffset;
@@ -418,6 +431,10 @@ export class AoeWebGl {
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         // Branch on the existing packet tags in the shader. One ordered
         // instanced draw keeps interleaved shoreline and actor pixels intact.
+        if (!count) {
+            this.needsFrameValidation = true;
+            return true;
+        }
         gl.useProgram(this.programs[0]);
         gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, count);
         if (effects) {
@@ -460,6 +477,7 @@ export class AoeWebGl {
     dispose() {
         if (this.disposed) return;
         const gl = this.gl;
+        this.releaseReadback?.();
         window.removeEventListener('pagehide', this.onPageHide);
         for (const sync of this.pendingFrames) gl.deleteSync(sync);
         this.pendingFrames = [];
