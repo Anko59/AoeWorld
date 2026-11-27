@@ -33,7 +33,7 @@ test("an over-limit camera guard falls back to the visible subscription", async 
         socket.send(
           Buffer.from([
             0,
-            30,
+            32,
             1,
             0,
             0,
@@ -59,7 +59,7 @@ test("an over-limit camera guard falls back to the visible subscription", async 
         left <= bandX && bandX < right && top <= bandY && bandY < bottom;
       const count = own + visible + (coversBand ? margin : 0);
       if (count > cap) {
-        socket.send(Buffer.from([12, ...unsigned(revision), ...unsigned(413)]));
+        socket.send(Buffer.from([13, ...unsigned(revision), ...unsigned(413)]));
         return;
       }
       const units = Array.from({ length: count }, (_, index) => {
