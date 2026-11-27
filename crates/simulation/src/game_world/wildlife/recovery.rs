@@ -16,6 +16,8 @@ fn birth_seconds(kind: AnimalKind) -> Option<u64> {
 
 #[derive(Debug, Default)]
 pub(super) struct HerdRecovery {
+    /// Dirty marker for map-only checkpoints, separate from gameplay state.
+    pub(super) revision: u64,
     herds: BTreeMap<EntityId, Herd>,
     membership: BTreeMap<EntityId, EntityId>,
     due: BTreeSet<(u64, EntityId)>,
@@ -30,6 +32,10 @@ struct Herd {
 }
 
 impl HerdRecovery {
+    pub(super) fn has_pending_births(&self) -> bool {
+        !self.due.is_empty()
+    }
+
     fn insert(&mut self, id: EntityId, herd: Herd) {
         self.membership
             .extend(herd.members.iter().map(|&member| (member, id)));
@@ -84,6 +90,7 @@ impl GameWorld {
                 due: None,
             },
         );
+        self.wildlife.recovery.revision += 1;
     }
 
     pub(super) fn herd_lost_member(&mut self, member: EntityId) {
@@ -120,6 +127,7 @@ impl GameWorld {
         {
             let recovery = &mut self.wildlife.recovery;
             recovery.due.remove(&(due, id));
+            recovery.revision += 1;
             let Some(herd) = recovery.herds.get_mut(&id) else {
                 continue;
             };

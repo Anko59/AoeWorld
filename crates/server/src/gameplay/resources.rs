@@ -11,6 +11,8 @@ use std::{
 };
 #[path = "resources/feed.rs"]
 mod feed;
+#[path = "resources/herds.rs"]
+mod herds;
 #[path = "resources/store.rs"]
 mod store;
 pub(super) use feed::Journal;
@@ -53,6 +55,7 @@ pub(super) struct ResourcePersistence {
     clock_origin: u64,
     // Accessed only while holding the exclusive world guard.
     checkpoint_required: AtomicBool,
+    herds: herds::HerdPersistence,
 }
 
 impl ResourcePersistence {
@@ -75,6 +78,7 @@ impl ResourcePersistence {
     }
 
     pub(super) fn checkpoint_recovery(&self, world: &GameWorld, before: Option<Tick>) {
+        self.herds.step(world);
         let now = world.tick().0;
         let needs_snapshot = self.checkpoint_required.load(Ordering::Relaxed)
             || before.is_some_and(|deadline| deadline.0 <= now);
@@ -167,15 +171,20 @@ impl GameplayService {
             }
         };
         let unit = crate::gameplay_map::initialize_village(&mut world, tile)?;
-        let mut service = Self::from_world(world, unit, Some(content_hash), Some(metadata));
-        service.resource_persistence = directory.map(|directory| {
-            Arc::new(ResourcePersistence {
-                directory,
-                hash: content_hash,
-                clock_origin,
-                checkpoint_required: AtomicBool::new(checkpoint_required),
+        let persistence = directory
+            .map(|directory| {
+                let herds = herds::HerdPersistence::open(&directory, content_hash, &mut world)?;
+                Ok::<_, ResourceLifecycleError>(Arc::new(ResourcePersistence {
+                    directory,
+                    hash: content_hash,
+                    clock_origin,
+                    checkpoint_required: AtomicBool::new(checkpoint_required),
+                    herds,
+                }))
             })
-        });
+            .transpose()?;
+        let mut service = Self::from_world(world, unit, Some(content_hash), Some(metadata));
+        service.resource_persistence = persistence;
         Ok(Some(service))
     }
 

@@ -170,3 +170,91 @@ fn recovery_clock_extends_only_its_checkpoint_revision() {
     assert_eq!(resumed.tick, 16);
     assert_eq!(resumed.snapshot, snapshot);
 }
+
+#[tokio::test]
+async fn map_recreation_resumes_a_hunted_herd_and_keeps_an_extinct_herd_gone() {
+    use aoe_core::{EntityId, PlayerId};
+    use aoe_simulation::AnimalKind;
+
+    async fn living_deer(service: &GameplayService) -> Vec<EntityId> {
+        service
+            .world
+            .read()
+            .await
+            .animals()
+            .filter(|animal| animal.kind == AnimalKind::Deer && animal.hp > 0)
+            .map(|animal| animal.id)
+            .collect()
+    }
+
+    async fn hunt(service: &GameplayService, deer: EntityId) {
+        let player = PlayerId(0);
+        {
+            let mut world = service.world.write().await;
+            let position = world.animal(deer).unwrap().position;
+            let hunter = world.spawn_villager(player, position).unwrap();
+            world.issue_hunt(player, &[hunter], deer).unwrap();
+        }
+        for _ in 0..100 {
+            service.tick().await;
+            if service.world.read().await.animal(deer).unwrap().hp == 0 {
+                return;
+            }
+        }
+        panic!("the hunt did not kill the deer");
+    }
+
+    let directory = tempfile::tempdir().unwrap();
+    let package = package();
+    let reopen = || {
+        GameplayService::from_stored_map(
+            package.clone(),
+            Some(Arc::new(Flat)),
+            Some(directory.path().to_owned()),
+            &|| false,
+        )
+        .unwrap()
+        .unwrap()
+    };
+    let service = reopen();
+    service.set_fog_disabled(true).await;
+    let starting = living_deer(&service).await;
+    assert!(starting.len() > 1);
+    let hz = u64::from(service.world.read().await.config().tick_hz);
+    hunt(&service, starting[0]).await;
+    let survivors = &starting[1..];
+    for _ in 0..100 * hz {
+        service.tick().await;
+    }
+    assert_eq!(living_deer(&service).await, survivors);
+    drop(service);
+
+    let service = reopen();
+    service.set_fog_disabled(true).await;
+    assert_eq!(living_deer(&service).await, survivors);
+    for _ in 1..140 * hz {
+        service.tick().await;
+    }
+    assert_eq!(living_deer(&service).await, survivors);
+    service.tick().await;
+    let recovered = living_deer(&service).await;
+    assert_eq!(recovered.len(), starting.len());
+    assert!(survivors.iter().all(|id| recovered.contains(id)));
+    drop(service);
+
+    let service = reopen();
+    service.set_fog_disabled(true).await;
+    assert_eq!(living_deer(&service).await, recovered);
+    for id in recovered {
+        hunt(&service, id).await;
+    }
+    assert!(living_deer(&service).await.is_empty());
+    drop(service);
+
+    let service = reopen();
+    assert!(living_deer(&service).await.is_empty());
+    for _ in 0..240 * hz {
+        service.tick().await;
+    }
+    assert!(living_deer(&service).await.is_empty());
+}

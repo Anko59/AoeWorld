@@ -11,10 +11,12 @@ mod continuation;
 mod hash;
 mod hunting;
 mod lure;
+mod map_herds;
 mod navigation;
 mod recovery;
 mod spawning;
 mod table;
+pub use map_herds::MapHerdSnapshot;
 pub use table::{AnimalKind, WILDLIFE_RULES, WildlifeRules};
 
 /// Animals per seat: the 16–18 of a village's wildlife kit, with room to spare.

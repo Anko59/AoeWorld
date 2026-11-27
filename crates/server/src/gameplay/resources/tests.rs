@@ -102,18 +102,20 @@ async fn persisted_depletion_survives_service_recreation_and_failed_save_is_atom
     .unwrap()
     .unwrap();
     assert_eq!(restored.resource_snapshot().await.unwrap(), snapshot);
-    let failed_directory = directory.path().join("not-a-directory");
-    std::fs::write(&failed_directory, b"sentinel").unwrap();
-    let mut failed =
-        GameplayService::from_stored_map(package, Some(Arc::new(Flat)), None, &|| false)
-            .unwrap()
-            .unwrap();
-    failed.resource_persistence = Some(Arc::new(ResourcePersistence {
-        directory: failed_directory,
-        hash: failed.map_content_hash.unwrap(),
-        clock_origin: 0,
-        checkpoint_required: AtomicBool::new(false),
-    }));
+    let failed_directory = tempfile::tempdir().unwrap();
+    let failed = GameplayService::from_stored_map(
+        package,
+        Some(Arc::new(Flat)),
+        Some(failed_directory.path().to_owned()),
+        &|| false,
+    )
+    .unwrap()
+    .unwrap();
+    std::fs::write(
+        failed_directory.path().join("resource-overlays"),
+        b"sentinel",
+    )
+    .unwrap();
     let before = failed.resource_snapshot().await.unwrap();
     assert!(failed.deplete_resource_persisted(node.id, 1).await.is_err());
     assert_eq!(failed.resource_snapshot().await.unwrap(), before);

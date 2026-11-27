@@ -36,6 +36,9 @@ impl GameWorld {
         a.state.death_tick = Some(self.tick);
         a.state.task = AnimalTask::Dead;
         a.state.target = None;
+        if a.state.kind != super::AnimalKind::Wolf {
+            self.wildlife.recovery.revision += 1;
+        }
         self.herd_lost_member(id);
         self.wildlife.engaged.remove(&id);
         self.update_observer(id, None);

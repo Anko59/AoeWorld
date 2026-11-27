@@ -4,7 +4,7 @@
 
 use super::ResourceLifecycleError;
 use aoe_map::ResourceOverlaySnapshot;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
     fs::{self, File, OpenOptions},
     io::{Read, Write},
@@ -14,9 +14,9 @@ use std::{
 // Worst-case JSON change and recovery entries plus metadata.
 // The bound covers the map's supported overlay, independently of wire frames.
 pub(super) const MAX_SNAPSHOT_BYTES: u64 = aoe_map::MAX_RESOURCE_OVERLAY_CHANGES as u64 * 96 + 1024;
-static SAVE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+pub(super) static SAVE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-fn path(directory: &Path, hash: [u8; 32]) -> PathBuf {
+pub(super) fn path(directory: &Path, hash: [u8; 32]) -> PathBuf {
     let name: String = hash.iter().map(|byte| format!("{byte:02x}")).collect();
     directory.join(format!("{name}.json"))
 }
@@ -55,17 +55,24 @@ fn load_checkpoint(
     directory: &Path,
     hash: [u8; 32],
 ) -> Result<Option<Checkpoint>, ResourceLifecycleError> {
-    let file = match File::open(path(directory, hash)) {
+    load_json(&path(directory, hash), MAX_SNAPSHOT_BYTES)
+}
+
+pub(super) fn load_json<T: DeserializeOwned>(
+    path: &Path,
+    limit: u64,
+) -> Result<Option<T>, ResourceLifecycleError> {
+    let file = match File::open(path) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(error.into()),
     };
-    if file.metadata()?.len() > MAX_SNAPSHOT_BYTES {
+    if file.metadata()?.len() > limit {
         return Err(ResourceLifecycleError::TooLarge);
     }
     let mut bytes = Vec::new();
-    file.take(MAX_SNAPSHOT_BYTES + 1).read_to_end(&mut bytes)?;
-    if bytes.len() as u64 > MAX_SNAPSHOT_BYTES {
+    file.take(limit + 1).read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > limit {
         return Err(ResourceLifecycleError::TooLarge);
     }
     Ok(Some(serde_json::from_slice(&bytes)?))
@@ -111,7 +118,7 @@ fn clock_path(directory: &Path, hash: [u8; 32]) -> PathBuf {
     path(directory, hash).with_extension("clock")
 }
 
-fn load_clock(
+pub(super) fn load_clock(
     directory: &Path,
     hash: [u8; 32],
 ) -> Result<Option<(u64, u64)>, ResourceLifecycleError> {
@@ -134,7 +141,7 @@ fn load_clock(
 }
 
 /// Save elapsed recovery time without serializing or scanning the overlay.
-/// A clock from an older amount revision is superseded by its checkpoint.
+/// A clock from an older checkpoint revision is superseded by its checkpoint.
 pub(super) fn save_clock(
     directory: &Path,
     hash: [u8; 32],
@@ -151,7 +158,7 @@ pub(super) fn save_clock(
     replace(directory, &clock_path(directory, hash), &bytes)
 }
 
-fn replace(
+pub(super) fn replace(
     directory: &Path,
     destination: &Path,
     bytes: &[u8],
