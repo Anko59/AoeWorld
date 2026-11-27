@@ -113,7 +113,9 @@ for (const layout of layouts) {
         "minimap-camera",
         "minimap-resources",
         "minimap-entities",
+        "minimap-marks",
         "minimap-border",
+        "minimap-pings",
       ]
         .map((id) => document.getElementById(id))
         .filter((node) => node !== null);

@@ -197,3 +197,113 @@ test("explored cells keep a flat tone until their own map's land arrives", async
     expect(apart(seen[name].middle, colour), name).toBeLessThanOrEqual(2);
   }
 });
+
+test("land is drawn with its picture: not if it fails, nor once the map is gone", async ({
+  page,
+}) => {
+  await landPage(page);
+  const seen = await page.evaluate(async () => {
+    const land = Reflect.get(window, "land") as Land;
+    const panel = document.getElementById("minimap");
+    const image = document.getElementById("minimap-terrain");
+    if (!panel || !image) throw new Error("The minimap is missing");
+    let retry: () => void = () => undefined;
+    const later = window.setTimeout.bind(window);
+    Reflect.set(window, "setTimeout", (run: () => void, delay?: number) => {
+      if (delay !== 5000) return later(run, delay);
+      retry = run;
+      return 0;
+    });
+    const flat = (kind: number) => land.raster(8, () => kind | (8 << 4));
+    // Acts once the next picture is asked for, before it can load.
+    const picture = (act: () => void) => {
+      const watch = new MutationObserver(() => {
+        if (!image.hasAttribute("href")) return;
+        watch.disconnect();
+        act();
+      });
+      watch.observe(image, { attributeFilter: ["href"] });
+    };
+    const fail = () => {
+      image.dispatchEvent(new Event("error"));
+    };
+    const look = async () => {
+      land.fog(() => 2);
+      await land.frames(3);
+      const { data, width } = land.composed();
+      const from = (256 * width + 256) * 4;
+      return {
+        raster: panel.dataset["raster"],
+        colour: Array.from(data.slice(from, from + 4)),
+      };
+    };
+
+    await land.open({});
+    const none = await look();
+
+    picture(fail);
+    await land.open({ fine: flat(0) });
+    const failed = await look();
+    retry();
+    await land.until("ready");
+    const retried = await look();
+
+    // A refinement whose picture fails leaves the coarse land; the retry asks
+    // for the refinement alone.
+    const late = land.hold();
+    const one = land.open({ coarse: flat(2), fine: late.reply });
+    await land.until("coarse");
+    picture(fail);
+    late.release(flat(11));
+    await one;
+    const kept = await look();
+    retry();
+    await land.until("ready");
+    const refined = await look();
+
+    const canvas = HTMLCanvasElement.prototype;
+    const encode: unknown = Reflect.get(canvas, "toBlob");
+    Reflect.set(canvas, "toBlob", (done: (blob: null) => void) => done(null));
+    await land.open({ fine: flat(0) });
+    Reflect.set(canvas, "toBlob", encode);
+    const unencoded = await look();
+
+    // The map changes in the moment its picture has loaded.
+    const next = land.hold();
+    let two: Promise<void> = Promise.resolve();
+    picture(() => {
+      image.dispatchEvent(new Event("load"));
+      two = land.open({ fine: next.reply });
+    });
+    await land.open({ fine: flat(0) });
+    const gone = await look();
+    next.release(flat(10));
+    await two;
+    const own = await look();
+    return {
+      none,
+      failed,
+      retried,
+      kept,
+      refined,
+      unencoded,
+      gone,
+      own,
+    };
+  });
+  const tone = seen.none.colour;
+  expect(tone[3]).toBe(255);
+  for (const [name, raster, colour] of [
+    ["none", "failed", tone],
+    ["failed", "failed", tone],
+    ["retried", "ready", [132, 172, 80]],
+    ["kept", "coarse", [35, 86, 48]],
+    ["refined", "ready", [28, 84, 132]],
+    ["unencoded", "failed", tone],
+    ["gone", "pending", tone],
+    ["own", "ready", [50, 125, 182]],
+  ] as const) {
+    expect.soft(seen[name].raster, name).toBe(raster);
+    expect.soft(apart(seen[name].colour, colour), name).toBeLessThanOrEqual(2);
+  }
+});
