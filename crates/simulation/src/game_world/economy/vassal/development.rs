@@ -1,8 +1,8 @@
 use super::*;
 use crate::Stockpile;
+use std::collections::BinaryHeap;
 
-/// New placements attempted per pass and total paid sites kept in flight.
-const ATTEMPTS_PER_PASS: usize = 8;
+/// Paid foundations a domain may keep in flight.
 const PIPELINE: usize = 24;
 
 const RESERVE: Stockpile = Stockpile {
@@ -157,53 +157,59 @@ impl GameWorld {
         if open >= PIPELINE {
             return;
         }
-        let deficits = &work.deficits;
-        let mut candidates: Vec<_> = deficits
+        // Heapify the domain's current deficits once. Only pop as much work
+        // as this pipeline can use, including successors to refused sites.
+        #[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+        struct Priority {
+            focus: (bool, bool),
+            threatened_tier: u8,
+            new: bool,
+            cost_distance: u64,
+            tier: u8,
+            before_cursor: bool,
+            index: usize,
+        }
+        let mut candidates: BinaryHeap<_> = work
+            .deficits
             .iter()
             .copied()
-            .filter_map(|(i, site)| {
+            .filter_map(|(index, site)| {
+                if d.refused.contains_key(&site.tile) {
+                    return None;
+                }
                 let occupied = self.building_at_for(player, site.tile).is_some();
                 let replacement =
                     occupied && self.upgradable(player, site.tile, site.kind).is_some();
                 let distance = super::super::placement::distance_squared(anchor, site.tile);
                 let near = distance <= (VASSAL_RADIUS as u64 / 2).pow(2);
-                ((!occupied || replacement)
-                    && (!survey_pending || near || replacement)
-                    && !d.refused.contains_key(&site.tile))
-                .then(|| {
-                    let rank = (
-                        site.build_priority(focus),
-                        if threatened { site.tier } else { 0 },
-                        !replacement,
-                        distance + u64::from(site.kind.rules().build_seconds) * 4,
-                        site.tier,
-                        i < cursor,
-                        i,
-                    );
-                    (rank, site)
-                })
+                ((!occupied || replacement) && (!survey_pending || near || replacement)).then(
+                    || {
+                        std::cmp::Reverse(Priority {
+                            focus: site.build_priority(focus),
+                            threatened_tier: if threatened { site.tier } else { 0 },
+                            new: !replacement,
+                            cost_distance: distance
+                                + u64::from(site.kind.rules().build_seconds) * 4,
+                            tier: site.tier,
+                            before_cursor: index < cursor,
+                            index,
+                        })
+                    },
+                )
             })
             .collect();
-        // Only the leading candidates can be attempted. The site index
-        // breaks ties, so partial selection preserves their original order.
-        // Keep the fixed selection index visible to the movement cap lint.
-        let limit = (0..usize::MAX).take(ATTEMPTS_PER_PASS * 4).len();
-        if candidates.len() > limit {
-            candidates.select_nth_unstable_by_key(limit, |(rank, _)| *rank);
-            candidates.truncate(limit);
-        }
-        candidates.sort_unstable_by_key(|(rank, _)| *rank);
         let mut placed = BTreeSet::new();
-        for ((.., i), site) in candidates {
+        while open < PIPELINE {
+            let Some(std::cmp::Reverse(Priority { index: i, .. })) = candidates.pop() else {
+                break;
+            };
+            let site = sites[i];
             let plan::Site {
                 kind,
                 tile,
                 vertical,
                 ..
             } = site;
-            if open >= PIPELINE || placed.len() >= ATTEMPTS_PER_PASS {
-                break;
-            }
             if placed.contains(&tile) {
                 continue;
             }

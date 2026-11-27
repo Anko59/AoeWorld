@@ -282,3 +282,95 @@ fn private_road_on_the_plan_is_counted_once_by_its_owner() {
     assert_eq!(work.open.len(), 1);
     assert_eq!(work.open[0].0, road);
 }
+
+#[test]
+fn one_development_visit_fills_the_paid_pipeline_with_separate_sites() {
+    let (mut w, v, _, _) = pending_domain();
+    let sites: Vec<_> = (0..30)
+        .map(|n| {
+            Site::new(
+                BuildingKind::Road,
+                TileCoord::new(50 + 2 * n, 110),
+                TIER_ROAD,
+            )
+        })
+        .collect();
+    let domain = w.economy.vassals.domains.get_mut(&v).unwrap();
+    domain.pending = None;
+    domain.plan = sites.clone();
+    domain.development = true;
+
+    w.vassal_develop(v);
+    assert_eq!(
+        sites
+            .iter()
+            .filter(|site| w.building_at_for(PlayerId(0), site.tile).is_some())
+            .count(),
+        24
+    );
+    w.vassal_develop(v);
+    assert_eq!(
+        sites
+            .iter()
+            .filter(|site| w.building_at_for(PlayerId(0), site.tile).is_some())
+            .count(),
+        24,
+        "existing paid foundations reserve all pipeline slots"
+    );
+}
+
+#[test]
+fn blocked_candidates_do_not_hide_valid_sites_after_the_first_thirty_two() {
+    let (mut w, v, _, _) = pending_domain();
+    let close = (0..38).map(|n| {
+        Site::new(
+            BuildingKind::Road,
+            TileCoord::new(52 + 2 * n, 108),
+            TIER_ROAD,
+        )
+    });
+    let far = Site::new(BuildingKind::Road, TileCoord::new(100, 155), TIER_ROAD);
+    let mut plan = Vec::new();
+    for site in close {
+        w.economy.blocked_tiles.insert(site.tile);
+        plan.push(site);
+    }
+    plan.push(far);
+    let d = w.economy.vassals.domains.get_mut(&v).unwrap();
+    d.pending = None;
+    d.plan = plan;
+    d.development = true;
+    w.vassal_develop(v);
+    assert!(w.building_at_for(PlayerId(0), far.tile).is_some());
+}
+
+#[test]
+fn tower_plan_reaches_every_work_point_beyond_the_first_eight() {
+    let (mut w, v, _, _) = pending_domain();
+    let center = w.economy.vassals.domains[&v].center;
+    for (dx, dy) in [
+        (-40, -40),
+        (-20, -40),
+        (0, -40),
+        (20, -40),
+        (40, -40),
+        (-40, -20),
+        (-20, -20),
+        (0, -20),
+        (20, -20),
+        (40, -20),
+    ] {
+        w.insert_building(
+            PlayerId(0),
+            BuildingKind::MiningCamp,
+            TileRect::from_xywh(center.x + dx, center.y + dy, 2, 2),
+            true,
+        )
+        .unwrap();
+    }
+    let plan = sites(&w, center, PlayerId(0), Age::Castle, &BTreeMap::new(), None);
+    assert_eq!(
+        plan.iter().filter(|s| s.tier == TIER_WORK_TOWER).count(),
+        11
+    );
+}
