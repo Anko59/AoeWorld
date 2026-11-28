@@ -71,7 +71,7 @@ unplayable" and was dropped. The new France game was "a pleasure, still nearly n
     march response and defence. Engaged armies still stack too tightly, and late-game attacks away from home need a
     play recheck with the Rust AI ([gameplay](roadmap/gameplay.md), [AI](roadmap/ai.md)).
 
-Next after these: recheck merged rock footprints (#926), DE road edges, far-view training flow and enemy foundation bars
+Owner ideas of 11-28, my order: test sanitation first (it speeds every other change), then the button design system, then the world-map setup picker. Next after these: recheck merged rock footprints (#926), DE road edges, far-view training flow and enemy foundation bars
 in play. Medieval DE styling remains for the training and activity panels. #974 merged bare furrows for unseeded farms;
 recheck in play. The hierarchy build order stays provinces first.
 
