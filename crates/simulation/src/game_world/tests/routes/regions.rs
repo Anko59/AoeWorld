@@ -129,14 +129,14 @@ fn a_certified_frontier_route_survives_the_disconnected_requested_goal() {
 
     // A certificate is not an exemption from current connectivity: closing
     // the replacement endpoint must still end the waiting route, at the
-    // regions' next look (every 8 reference ticks).
+    // regions' next look (every 40 reference ticks).
     let area = TileRect::from_xywh(certified.x, certified.y, 1, 1);
     let Terrain::Map { overlay, .. } = &mut world.terrain else {
         unreachable!();
     };
     overlay.add_footprint(area).unwrap();
     world.regions_changed(area);
-    for _ in 0..8 {
+    for _ in 0..40 {
         world.tick.0 += 1;
         world.serve_route_searches(0, &mut changed);
     }
