@@ -25,7 +25,7 @@ mod timing;
 
 /// Read by `make check-fixtures` to explain a save that no longer loads.
 /// Saves include relics and resource recovery.
-pub const SAVE_VERSION: u16 = 27;
+pub const SAVE_VERSION: u16 = 28;
 const MAX_NAME: usize = 60;
 const MAX_SAVE_BYTES: u64 = 2 << 30;
 

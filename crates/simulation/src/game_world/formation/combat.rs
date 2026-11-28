@@ -203,7 +203,7 @@ impl GameWorld {
         chunk: ChunkCoord,
     ) -> (u16, Vec<(EntityId, Goal)>) {
         let mut out = (0, Vec::new());
-        if !self.chunks.presence.others(chunk, player) {
+        if !self.enemies_present(&self.chunks.presence, chunk, player) {
             return out;
         }
         let Some(ids) = self.chunks.get(&chunk) else {
@@ -212,7 +212,7 @@ impl GameWorld {
         for &id in ids {
             let unit = self.units[self.lookup[&id]].state;
             if unit.hp > 0
-                && unit.player != player
+                && self.is_enemy(player, unit.player)
                 && !self.embarked(id)
                 && self.unit_visible_to(player, id)
             {
@@ -247,10 +247,9 @@ impl GameWorld {
                 if out.contains_key(&id) {
                     continue;
                 }
-                if let Some(b) = self
-                    .building(id)
-                    .filter(|b| b.player != player && b.hp > 0 && !b.kind.is_obstacle_target())
-                    && self.visibility(player, tile) == TileVisibility::Visible
+                if let Some(b) = self.building(id).filter(|b| {
+                    self.is_enemy(player, b.player) && b.hp > 0 && !b.kind.is_obstacle_target()
+                }) && self.visibility(player, tile) == TileVisibility::Visible
                 {
                     out.insert(id, Goal::Building(b.footprint));
                 }

@@ -35,7 +35,7 @@ impl GameWorld {
             self.economy
                 .buildings
                 .get(id)
-                .is_some_and(|building| building.player != player && building.hp > 0)
+                .is_some_and(|building| self.is_enemy(player, building.player) && building.hp > 0)
         })
     }
 

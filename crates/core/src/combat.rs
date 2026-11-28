@@ -10,3 +10,13 @@ pub enum CombatStance {
     StandGround,
     NoAttack,
 }
+
+/// One seat's relationship to another. An alliance always binds both seats.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[repr(u8)]
+pub enum DiplomaticStance {
+    #[default]
+    Enemy,
+    Neutral,
+    Ally,
+}

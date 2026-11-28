@@ -170,6 +170,7 @@ impl GameWorld {
         hash.update(&self.next_entity_id.to_le_bytes());
         self.economy.update_hash(&mut hash, self.tick.0);
         self.combat.update_hash(&mut hash);
+        self.diplomacy.hash(&mut hash);
         self.wildlife.update_hash(&mut hash);
         self.hash_relics(&mut hash);
         self.vision.update_hash(&mut hash);

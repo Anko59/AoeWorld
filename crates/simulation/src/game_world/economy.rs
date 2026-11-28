@@ -288,6 +288,12 @@ pub const VILLAGE_RULES: VillageRules = VillageRules {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum EconomyError {
+    #[error("diplomacy requires two different players in this match")]
+    InvalidDiplomaticSeat,
+    #[error("end the war before offering an alliance")]
+    DiplomacyAtWar,
+    #[error("the tribute amount is outside its allowed range")]
+    InvalidTributeAmount,
     #[error("this Town Center already has a Steward or one in training")]
     StewardExists,
     #[error("Steward settings are outside their allowed ranges")]
@@ -308,7 +314,7 @@ pub enum EconomyError {
     PopulationCap,
     #[error("town center training queue is full")]
     TrainingQueueFull,
-    #[error("attack target is unknown, dead or belongs to the same player")]
+    #[error("attack target is unknown, dead or friendly")]
     InvalidTarget,
     #[error("no reachable attack position within the bounded search")]
     NoAttackPosition,

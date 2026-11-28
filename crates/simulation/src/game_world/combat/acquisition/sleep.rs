@@ -69,6 +69,18 @@ impl Quiet {
         self.awake.activate(id);
     }
 
+    /// A declaration of war invalidates the quiet proof even if nobody moved.
+    pub(crate) fn rouse_player(&mut self, player: PlayerId) {
+        let ids: Vec<_> = self
+            .jobs
+            .iter()
+            .filter_map(|(&id, job)| (job.player == player).then_some(id))
+            .collect();
+        for id in ids {
+            self.wake(id);
+        }
+    }
+
     /// Out of sleep or parking, still idle: an arrival near it changes
     /// nothing about the seeker itself.
     #[inline]
@@ -168,8 +180,8 @@ impl GameWorld {
     /// a threat. Read from the chunk summaries, never the units or tiles.
     fn quiet_region(&self, u: &GameUnit, area: &TargetArea) -> bool {
         chunks(area.bounds(self)).all(|chunk| {
-            !self.chunks.presence.others(chunk, u.player)
-                && !self.vision.building_chunks.others(chunk, u.player)
+            !self.enemies_present(&self.chunks.presence, chunk, u.player)
+                && !self.enemies_present(&self.vision.building_chunks, chunk, u.player)
         })
     }
 

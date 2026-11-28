@@ -141,7 +141,11 @@ impl GameWorld {
         };
         self.combat.stats.hits += 1;
         if let Some(&victim_index) = self.lookup.get(&target) {
-            if self.units[victim_index].state.hp == 0 || self.embarked(target) {
+            let victim = &self.units[victim_index].state;
+            if victim.hp == 0
+                || self.allied_seats(attacker_player, victim.player)
+                || self.embarked(target)
+            {
                 return;
             }
             let (melee, pierce) = self.unit_armour(target).unwrap_or_default();
@@ -177,7 +181,10 @@ impl GameWorld {
             if self.strike_animal(target, attacker_id, before - hp) {
                 self.finish_target_attack(attacker_id, target, changed);
             }
-        } else if let Some(building) = self.building(target).filter(|b| !b.is_unstarted()) {
+        } else if let Some(building) = self
+            .building(target)
+            .filter(|b| !b.is_unstarted() && !self.allied_seats(attacker_player, b.player))
+        {
             let armour = super::table::age_armour(building.kind, building.age);
             let masonry = self.building_has_masonry(&building);
             let (research_melee, research_pierce) =

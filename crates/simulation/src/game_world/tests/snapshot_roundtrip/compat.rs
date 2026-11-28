@@ -55,6 +55,17 @@ fn schema() -> String {
 fn busy() -> GameWorld {
     let (mut world, start) = flat();
     world.initialize_village(PlayerId(0), start).unwrap();
+    world
+        .insert_building(
+            PlayerId(1),
+            crate::BuildingKind::Market,
+            aoe_core::TileRect::from_xywh(start.x + 24, start.y + 16, 4, 4),
+            true,
+        )
+        .unwrap();
+    world
+        .set_diplomatic_stance(PlayerId(0), PlayerId(1), crate::DiplomaticStance::Ally)
+        .unwrap();
     let at = |dx: i32, dy: i32| {
         aoe_core::WorldPosition::from_tile_center(TileCoord::new(start.x + dx, start.y + dy))
             .unwrap()
