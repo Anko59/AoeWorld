@@ -10,6 +10,18 @@ export function initSaves({ readJson, tokenHeaders, sequence, skirmish }) {
   if (!el('load-game')) return;
   const list = el('saves-list');
   const status = el('saves-status');
+  const playground = el('playground');
+
+  // Welcome publishes readiness after storing the token for save actions.
+  function updateActions() {
+    if (!list.childElementCount) return;
+    const ready = playground.dataset.controllerReady === 'true';
+    for (const button of list.querySelectorAll('button')) button.disabled = !ready;
+    status.textContent = ready ? '' : 'Connecting to your world…';
+  }
+  new MutationObserver(updateActions).observe(playground, {
+    attributes: true, attributeFilter: ['data-controller-ready'],
+  });
 
   async function refresh() {
     status.textContent = 'Looking for saved games…';
@@ -44,6 +56,7 @@ export function initSaves({ readJson, tokenHeaders, sequence, skirmish }) {
       row.append(text, load, remove);
       list.append(row);
     }
+    updateActions();
   }
 
   function resume(card) {
