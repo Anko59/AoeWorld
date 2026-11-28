@@ -45,3 +45,5 @@ without a footer is incomplete.
   It can be a scout sighting before any fighting. The event records the
   observer's age, Town Centers, completed technologies, villagers and army
   in that tick. Unobserved contact stays null through the final sample.
+
+The first completed measurements are in the [France baseline](france-baseline.md).
