@@ -68,6 +68,7 @@ impl GameplayService {
         if humans.is_empty() || humans.len() > MAX_MATCH_SLOTS {
             return Err(MatchError::SlotCount);
         }
+        let (request, estimate) = (package.request, package.estimate);
         let content_hash = package.content_hash;
         let content_hash_hex = package.content_hash_hex();
         let metadata = crate::gameplay_map::map_metadata(&package);
@@ -94,6 +95,7 @@ impl GameplayService {
             }
             None => place_villages(&mut world, humans.len(), rules.seed, placed, cancelled)?,
         };
+        let names = seats::cities::names(&world, request, estimate, humans);
         let terrain = warmup::camera(&world, &starts, humans, &content_hash_hex, cancelled)?;
         warmup::prepare(&world, &starts, cancelled)?;
         let seeded = rules::seed_units(&mut world, &starts, rules, cancelled)?;
@@ -114,7 +116,8 @@ impl GameplayService {
                 human: *human,
             })
             .collect();
-        let service = Self::from_world_slots(world, setups, Some(content_hash), Some(metadata));
+        let service =
+            Self::from_named_world_slots(world, setups, Some(content_hash), Some(metadata), names);
         service.install_initial_terrain(terrain);
         Ok((service, seeded))
     }

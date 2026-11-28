@@ -15,7 +15,7 @@ async fn a_saved_match_resumes_with_the_same_seats_units_and_buildings() {
     let package = package();
     let directory = std::env::temp_dir().join(format!("aoe-saves-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&directory);
-    let (service, _) = GameplayService::from_match_rules(
+    let (mut service, _) = GameplayService::from_match_rules(
         package.clone(),
         None,
         &[true, false, false],
@@ -24,6 +24,13 @@ async fn a_saved_match_resumes_with_the_same_seats_units_and_buildings() {
         &|| false,
     )
     .expect("match");
+    Arc::get_mut(&mut service.slots).unwrap()[1].name = Some("Lyon".to_owned());
+    service
+        .world
+        .write()
+        .await
+        .set_diplomatic_stance(PlayerId(0), PlayerId(1), aoe_core::DiplomaticStance::Ally)
+        .unwrap();
     for _ in 0..40 {
         service.tick().await;
     }
@@ -40,6 +47,15 @@ async fn a_saved_match_resumes_with_the_same_seats_units_and_buildings() {
         resume_service(package.clone(), None, &loaded, &|| false, None, 20).expect("resumed");
     assert_eq!(report.units_lost + report.buildings_lost, 0, "{report:?}");
     assert_eq!(resumed.slot_infos().await.len(), 3);
+    assert_eq!(resumed.slots[1].name.as_deref(), Some("Lyon"));
+    assert_eq!(
+        resumed
+            .world
+            .read()
+            .await
+            .diplomatic_stance(PlayerId(1), PlayerId(0)),
+        aoe_core::DiplomaticStance::Ally,
+    );
     assert_eq!(
         resumed
             .slot_infos()
@@ -147,6 +163,7 @@ fn a_real_save_encodes_its_version_where_the_reader_looks_for_it() {
     let encode = |version: u16| {
         let seats = (0..9)
             .map(|id| SaveSeat {
+                name: None,
                 primary_unit_id: id,
                 human: id == 0,
             })

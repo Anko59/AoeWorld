@@ -18,8 +18,13 @@ pub(in super::super) fn unit(client: &Client, point: ScreenPoint) -> Option<Enti
 
 fn target(client: &Client, point: ScreenPoint, units_only: bool) -> Option<(EntityId, bool, bool)> {
     if crate::playground::game::strategic::active(client) {
-        return crate::playground::game::strategic::unit(client, point)
-            .map(|id| (id, false, client.units[&id].player != owner(client)));
+        return crate::playground::game::strategic::unit(client, point).map(|id| {
+            (
+                id,
+                false,
+                super::diplomacy::attackable(client, client.units[&id].player),
+            )
+        });
     }
     let scene = map::scene::prepare(client);
     let terrain_depth = aoe_rendering::surface_depth_at(&scene.triangles, point);
@@ -40,7 +45,7 @@ fn target(client: &Client, point: ScreenPoint, units_only: bool) -> Option<(Enti
         .units
         .values()
         .filter(|u| u.hp > 0)
-        .map(|u| (u.id, false, u.player != owner(client)));
+        .map(|u| (u.id, false, super::diplomacy::attackable(client, u.player)));
     let animals = client
         .village
         .animals
@@ -97,7 +102,7 @@ pub(in super::super) fn enemy_building(client: &Client, point: ScreenPoint) -> O
         .village
         .buildings
         .iter()
-        .find(|b| b.id == id && b.player != owner(client))
+        .find(|b| b.id == id && super::diplomacy::attackable(client, b.player))
         .map(|b| b.id)
 }
 

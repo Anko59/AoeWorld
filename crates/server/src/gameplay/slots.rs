@@ -27,6 +27,7 @@ pub(crate) struct Slot {
     pub(crate) primary_unit_id: EntityId,
     pub(crate) human: bool,
     pub(crate) token: ResumeToken,
+    pub(crate) name: Option<String>,
 }
 
 /// A `JoinSlot` named a token no slot of this match owns.
@@ -83,10 +84,26 @@ impl GameplayService {
     /// Hosts one match seat per entry; Tokens are issued here and never derived from a counter
     /// a client could guess.
     pub(crate) fn from_world_slots(
+        world: GameWorld,
+        setups: Vec<SlotSetup>,
+        map_content_hash: Option<[u8; 32]>,
+        map_metadata: Option<MapMetadata>,
+    ) -> Self {
+        Self::from_named_world_slots(
+            world,
+            setups,
+            map_content_hash,
+            map_metadata,
+            BTreeMap::new(),
+        )
+    }
+
+    pub(crate) fn from_named_world_slots(
         mut world: GameWorld,
         setups: Vec<SlotSetup>,
         map_content_hash: Option<[u8; 32]>,
         map_metadata: Option<MapMetadata>,
+        mut names: BTreeMap<PlayerId, String>,
     ) -> Self {
         let primary_unit_id = setups.first().map_or(EntityId(0), |s| s.primary_unit_id);
         // A fresh world built at the default rate steps at the rate the
@@ -119,6 +136,7 @@ impl GameplayService {
                 primary_unit_id: setup.primary_unit_id,
                 human: setup.human,
                 token: gameplay_transport::make_token(world_id, counter),
+                name: names.remove(&setup.player),
             })
             .collect();
         let probe = Arc::new(crate::gameplay_match::TickProbe::default());
@@ -262,6 +280,7 @@ impl GameplayService {
                 resident_buildings: BTreeMap::new(),
                 resident_animals: Vec::new(),
                 resident_relics: None,
+                resident_diplomacy: None,
                 resident_projectiles: Vec::new(),
                 resident_move_queues: Vec::new(),
                 resident_land: None,

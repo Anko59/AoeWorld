@@ -192,8 +192,9 @@ impl GameplayService {
         }
         let fanout_started = std::time::Instant::now();
         let last = self.fanout_probe.take_last_frame();
+        let slots = self.slots.clone();
         let built = tokio::task::spawn_blocking(move || {
-            let built = fanout::build(&world, &views, &changes, last);
+            let built = fanout::build(&world, &slots, &views, &changes, last);
             built.map(|built| (world, built))
         })
         .await

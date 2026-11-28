@@ -1,8 +1,11 @@
 use super::*;
-use crate::playground::game::village::picking;
+use crate::playground::game::village::{owner, picking};
 use aoe_core::{ScreenPoint, TileCoord, TileRect};
 use aoe_protocol::{Age, BuildingKind, ConstructionState, GameplayBuildingState};
 use aoe_rendering::{AtlasAddress, BuildingArt, BuildingPart, GameFrame};
+
+#[path = "picking/allies.rs"]
+mod allies;
 
 fn building(id: u32, x: i32, y: i32) -> GameplayBuildingState {
     GameplayBuildingState {
@@ -286,7 +289,7 @@ async fn enemy_unit_behind_tree_remains_an_attack_target() {
     primary.position = WorldPosition::from_tile_center(TileCoord::new(110, 110)).unwrap();
     client.units.insert(primary.id, primary);
     client.primary = Some(EntityId(2));
-    let enemy = if crate::playground::game::village::owner(&client) == PlayerId(1) {
+    let enemy = if owner(&client) == PlayerId(1) {
         PlayerId(2)
     } else {
         PlayerId(1)
@@ -317,6 +320,7 @@ async fn enemy_unit_behind_tree_remains_an_attack_target() {
         picking::actor(&client, point),
         Some((EntityId(1), false, true))
     );
+    allies::verify_attackability(&mut client, enemy, point);
     client.canvas.remove();
 }
 
@@ -371,7 +375,7 @@ async fn gold_behind_a_tree_remains_a_resource_target() {
 async fn a_tree_rectangle_behind_an_enemy_building_wins_selection_and_orders() {
     let mut client = fixture(1.0).await;
     client.units.clear();
-    let enemy = if crate::playground::game::village::owner(&client) == PlayerId(1) {
+    let enemy = if owner(&client) == PlayerId(1) {
         PlayerId(2)
     } else {
         PlayerId(1)
@@ -418,7 +422,7 @@ async fn completed_farm_has_a_work_cursor_for_a_selected_villager() {
     let mut client = fixture(1.0).await;
     client.units.get_mut(&EntityId(1)).unwrap().kind = aoe_protocol::UnitKind::Villager;
     client.selected.units(vec![EntityId(1)]);
-    let owner = crate::playground::game::village::owner(&client);
+    let owner = owner(&client);
     let farm = &mut client.village.buildings[0];
     farm.kind = BuildingKind::Farm;
     farm.player = owner;

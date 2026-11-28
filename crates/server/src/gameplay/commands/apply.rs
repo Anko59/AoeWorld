@@ -41,6 +41,28 @@ pub(in crate::gameplay) fn apply(
     }
     let commanded = commanded_units(&action);
     let result = match action {
+        PendingAction::Diplomacy {
+            player: other,
+            stance,
+        } => {
+            if stance == aoe_protocol::DiplomaticStance::Ally {
+                world.offer_alliance(player, other)
+            } else {
+                world.set_diplomatic_stance(player, other, stance)
+            }
+        }
+        PendingAction::Tribute {
+            player: other,
+            market,
+            resource,
+            amount,
+        } => world.issue_tribute(
+            player,
+            other,
+            market,
+            super::diplomacy::native_resource(resource),
+            amount,
+        ),
         PendingAction::Relic(action) => match action {
             aoe_protocol::RelicAction::PickUp { monk, relic } => {
                 world.issue_pickup_relic(player, monk, relic)
@@ -316,7 +338,10 @@ pub(in crate::gameplay) fn apply(
         Err(E::StewardExists) => CommandResult::RejectedStewardExists,
         Err(E::InvalidStewardSettings) => CommandResult::RejectedInvalidStewardSettings,
         Err(E::GarrisonFull) => CommandResult::RejectedGarrisonFull,
-        Err(E::InvalidTarget) => CommandResult::RejectedInvalidTarget,
+        Err(E::InvalidTarget | E::InvalidDiplomaticSeat | E::DiplomacyAtWar) => {
+            CommandResult::RejectedInvalidTarget
+        }
+        Err(E::InvalidTributeAmount) => CommandResult::RejectedInvalidResource,
         Err(E::InsufficientResources) => CommandResult::RejectedInsufficientResources,
         Err(E::NotOwner) => CommandResult::RejectedNotOwner,
         Err(E::WrongUnitKind) => CommandResult::RejectedWrongUnitKind,

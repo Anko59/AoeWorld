@@ -450,3 +450,6 @@ async fn a_castle_age_rust_ai_builds_a_monastery_and_banks_a_relic_in_skirmish()
         world.player_economy(ai).unwrap().stockpile,
     );
 }
+
+#[path = "ai_seats/diplomacy.rs"]
+mod diplomacy;

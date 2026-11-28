@@ -16,4 +16,6 @@ mod recorder;
 mod roster;
 mod scouts;
 
+#[path = "diplomacy/cases.rs"]
+mod diplomacy;
 mod relics;

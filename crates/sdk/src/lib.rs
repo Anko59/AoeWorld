@@ -38,6 +38,9 @@ mod world;
 #[cfg(test)]
 mod tests;
 
+pub use aoe_protocol::{
+    AllianceOffer, AlliedMarket, DiplomacySeat, DiplomacyView, DiplomaticStance,
+};
 pub use aoe_protocol::{CombatStance, GeneralState, GeneralStatus, SquadKind, SquadStatus};
 pub use aoe_protocol::{GroundRelic, MonasteryRelics, RelicAction, RelicVictory, RelicView};
 pub use bot::{Bot, RunLimits, RunSummary, run_bot};

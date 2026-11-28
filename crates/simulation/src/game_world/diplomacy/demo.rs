@@ -34,7 +34,7 @@ impl GameWorld {
         // The visitor walks toward the tower from outside its firing range,
         // giving the two seats time to agree an alliance before they meet.
         let militia = world.spawn_militia(guest, position(118, 101)?)?;
-        world.issue_move(militia, position(105, 117)?)?;
+        world.issue_move(militia, position(96, 113)?)?;
         Ok((world, [host, visitor]))
     }
 }

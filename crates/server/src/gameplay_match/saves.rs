@@ -23,8 +23,7 @@ use std::{
 
 mod timing;
 
-/// Read by `make check-fixtures` to explain a save that no longer loads.
-/// Saves include relics and resource recovery.
+/// Save format with diplomacy and the seat labels chosen at match start.
 pub const SAVE_VERSION: u16 = 28;
 const MAX_NAME: usize = 60;
 const MAX_SAVE_BYTES: u64 = 2 << 30;
@@ -33,6 +32,7 @@ const MAX_SAVE_BYTES: u64 = 2 << 30;
 struct SaveSeat {
     primary_unit_id: u32,
     human: bool,
+    name: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -42,10 +42,7 @@ struct SaveFile {
     world: WorldSnapshot,
 }
 
-/// `SaveFile`'s leading field alone. Postcard encodes a struct's fields in
-/// order, so the version reads back from a save whose body this build can no
-/// longer parse; without it an older save fails as a raw decoding error
-/// instead of saying it is from another version.
+/// Decode the leading version before reading the version-specific body.
 #[derive(Deserialize)]
 struct SaveVersion {
     version: u16,
@@ -135,12 +132,12 @@ impl GameplayService {
     ) -> Result<SaveCard, String> {
         let hash = self.map_hash().ok_or("this game has no map to save")?;
         let seats: Vec<SaveSeat> = self
-            .slot_infos()
-            .await
-            .into_iter()
+            .slots
+            .iter()
             .map(|slot| SaveSeat {
                 primary_unit_id: slot.primary_unit_id.0,
                 human: slot.human,
+                name: slot.name.clone(),
             })
             .collect();
         let guard = self.world.clone().read_owned().await;
@@ -417,9 +414,19 @@ fn resume_with<R>(
                 human,
             },
         )
+        .collect::<Vec<_>>();
+    let names = setups
+        .iter()
+        .zip(seats)
+        .filter_map(|(setup, seat)| Some((setup.player, seat.name.clone()?)))
         .collect();
-    let service =
-        GameplayService::from_world_slots(world, setups, Some(content_hash), Some(metadata));
+    let service = GameplayService::from_named_world_slots(
+        world,
+        setups,
+        Some(content_hash),
+        Some(metadata),
+        names,
+    );
     service.install_initial_terrain(terrain);
     Ok((service, report))
 }

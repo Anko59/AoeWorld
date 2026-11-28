@@ -26,6 +26,10 @@ tiles; Anatolia needs more): Copernicus GLO-90 ("Copernicus DEM public COG licen
 WorldCover 2021 ("CC BY 4.0; ESA WorldCover attribution required"). The Anatolia package uses
 neither. Package manifests list the lock of every source they used (`source_locks`).
 
+## City names
+
+AI seat names come from the [GeoNames gazetteer](https://www.geonames.org/export/) under its CC BY licence. Install the UTF-8 text member of a GeoNames city export such as `cities15000.zip` at `local-assets/geodata/cities.txt` before starting the server. Each seat takes the name of the nearest retained city to its starting Town Center. The data stays local. Matches without an installed gazetteer use numbered seats, and saves preserve the names assigned at match creation.
+
 ## Where generated packages and sources may be kept
 
 - **Caches only.** CI keeps the generated package in the GitHub Actions cache and nothing else.

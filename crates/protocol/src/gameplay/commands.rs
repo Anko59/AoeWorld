@@ -323,6 +323,18 @@ pub enum ClientMessage {
         sequence: u64,
         action: RelicAction,
     },
+    DiplomacyOrder {
+        sequence: u64,
+        player: PlayerId,
+        stance: DiplomaticStance,
+    },
+    TributeOrder {
+        sequence: u64,
+        player: PlayerId,
+        market: EntityId,
+        resource: ResourceKind,
+        amount: u32,
+    },
 }
 
 pub const MAX_TRAIN_BATCH: usize = 5;

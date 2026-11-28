@@ -39,6 +39,7 @@ pub struct World {
     pub(crate) buildings: BTreeMap<EntityId, GameplayBuildingState>,
     pub(crate) bridges: aoe_map::ResourceOverlay,
     pub(crate) relics: Option<aoe_protocol::RelicView>,
+    pub(crate) diplomacy: Option<aoe_protocol::DiplomacyView>,
     pub(crate) animals: BTreeMap<EntityId, Animal>,
     pub(crate) projectiles: Vec<Projectile>,
     move_queues: Vec<aoe_protocol::MoveQueue>,
@@ -88,6 +89,7 @@ impl World {
             bridges: Default::default(),
             animals: BTreeMap::new(),
             relics: None,
+            diplomacy: None,
             projectiles: Vec::new(),
             move_queues: Vec::new(),
             economy: None,
@@ -173,6 +175,9 @@ impl World {
                         });
                     }
                 }
+            }
+            M::Diplomacy(view) if view.revision == self.subscription => {
+                self.diplomacy = Some(view);
             }
             M::Relics(view) if view.revision == self.subscription => {
                 self.relics = Some(view);

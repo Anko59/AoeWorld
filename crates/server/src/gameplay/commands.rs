@@ -29,6 +29,8 @@ mod delete_tests;
 #[path = "commands/tests/detach.rs"]
 #[cfg(test)]
 mod detach_tests;
+#[path = "commands/diplomacy.rs"]
+mod diplomacy;
 #[path = "commands/dispatch.rs"]
 mod dispatch;
 #[path = "commands/formations.rs"]

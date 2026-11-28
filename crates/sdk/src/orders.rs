@@ -1,11 +1,21 @@
 //! Every order the browser can send, as one typed enum.
 use crate::model::{BuildingKind, ResourceKind, Tech, TradeResource, UnitKind};
-use aoe_core::{EntityId, TileCoord, WorldPosition};
+use aoe_core::{EntityId, PlayerId, TileCoord, WorldPosition};
 use aoe_protocol::GameplayClientMessage;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Order {
     Relic(aoe_protocol::RelicAction),
+    Diplomacy {
+        player: PlayerId,
+        stance: crate::DiplomaticStance,
+    },
+    Tribute {
+        player: PlayerId,
+        market: EntityId,
+        resource: ResourceKind,
+        amount: u32,
+    },
     SetStance {
         units: Vec<EntityId>,
         stance: crate::CombatStance,
@@ -196,6 +206,23 @@ impl Order {
         use GameplayClientMessage as M;
         Some(match self.clone() {
             Order::Relic(action) => M::RelicOrder { sequence, action },
+            Order::Diplomacy { player, stance } => M::DiplomacyOrder {
+                sequence,
+                player,
+                stance,
+            },
+            Order::Tribute {
+                player,
+                market,
+                resource,
+                amount,
+            } => M::TributeOrder {
+                sequence,
+                player,
+                market,
+                resource,
+                amount,
+            },
             Order::SetStance { units, stance } => M::StanceOrder {
                 sequence,
                 unit_ids: units,

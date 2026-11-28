@@ -4,6 +4,8 @@ use super::{GameWorld, GameplayService, Seed};
 #[cfg(test)]
 mod tests;
 
+mod diplomacy;
+
 impl GameplayService {
     pub fn volley_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
         let (world, primary) = GameWorld::volley_demo(seed)?;
@@ -78,6 +80,7 @@ impl GameplayService {
             primary_unit_id: general,
             human: true,
             token: self.slots[0].token,
+            name: None,
         }]
         .into();
         Ok(service)
@@ -102,6 +105,7 @@ impl GameplayService {
             primary_unit_id: vassal,
             human: true,
             token: self.slots[0].token,
+            name: None,
         }]
         .into();
         Ok(service)

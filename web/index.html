@@ -4,6 +4,7 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AoeWorld</title>
   <link rel="stylesheet" href="/interface/game.css">
+  <link rel="stylesheet" href="/interface/diplomacy/panel.css">
   <link rel="stylesheet" href="/interface/bottom-menu.css">
   <link rel="icon" href="/art/favicon.ico" sizes="16x16 32x32 48x48">
   <link rel="apple-touch-icon" href="/art/icon-180.png" sizes="180x180">
@@ -24,9 +25,24 @@
       <nav aria-label="Game menus">
         <button id="idle-villagers" type="button" aria-label="Find next idle villager" aria-keyshortcuts="." title="Idle villagers (.)" disabled><svg class="icon" aria-hidden="true"><use href="/interface/icons.svg#villager"></use></svg><b id="idle-villager-count">0</b></button>
         <button id="idle-military" type="button" aria-label="Find next idle military unit" aria-keyshortcuts="," title="Idle military (,)" disabled><svg class="icon" aria-hidden="true"><use href="/interface/icons.svg#soldier"></use></svg><b id="idle-military-count">0</b></button>
-        <button disabled>Objectives</button><button disabled>Chat</button><button disabled>Diplomacy</button><button id="menu-toggle" type="button">Menu</button><time id="game-clock">00:00</time>
+        <button disabled>Objectives</button><button disabled>Chat</button><button id="diplomacy-toggle" type="button" disabled>Diplomacy</button><button id="menu-toggle" type="button">Menu</button><time id="game-clock">00:00</time>
       </nav>
     </header>
+    <details id="scoreboard" hidden><summary>Scoreboard</summary><ul id="scoreboard-players"></ul></details>
+    <dialog id="diplomacy-panel" aria-labelledby="diplomacy-title">
+      <header><h2 id="diplomacy-title">Diplomacy</h2><button id="diplomacy-close" type="button">Close diplomacy</button></header>
+      <div class="diplomacy-table">
+        <table><thead><tr><th scope="col">Player</th><th scope="col">Stance</th><th scope="col">Tribute</th></tr></thead>
+          <tbody id="diplomacy-rows"></tbody>
+        </table>
+      </div>
+      <footer>
+        <label><span id="tribute-resource-icon"></span> Resource <select id="tribute-resource"></select></label>
+        <label>Amount <input id="tribute-amount" type="number" min="1" max="4294967295" step="1" value="100" required></label>
+        <span id="tribute-fee"></span>
+      </footer>
+      <p id="diplomacy-result" role="status"></p>
+    </dialog>
     <div id="game-notice" role="status"><span id="connection">Loading…</span></div><div id="relic-victory" role="status" hidden></div>
     <div id="game-error" role="alert" hidden><span id="game-error-message"></span> <a id="reload-game" href="/">Reload game</a></div>
     <section id="bottom-panel" aria-label="Village command panel">
@@ -74,7 +90,7 @@
         <image id="minimap-terrain" width="256" height="256" preserveAspectRatio="none" pointer-events="none"></image>
         <polygon id="minimap-viewport" visibility="hidden" pointer-events="none"></polygon>
         <circle id="minimap-primary" r="3" fill="#61c8ff" stroke="#102c39" pointer-events="none"></circle>
-        <g id="minimap-resources"></g><g id="minimap-relics"></g></g></g><g id="minimap-entities"></g><g id="minimap-marks"></g>
+        <g id="minimap-resources"></g><g id="minimap-relics"></g><path id="minimap-allied-markets" d=""><title>Allied Markets</title></path></g></g><g id="minimap-entities"></g><g id="minimap-marks"></g>
         <g id="minimap-border" fill="none" pointer-events="none" clip-path="url(#border-diamond)">
           <clipPath id="border-diamond"><path d="M128 0L256 128L128 256L0 128Z"/></clipPath>
           <linearGradient id="border-gilt" gradientUnits="userSpaceOnUse" x1="128" y1="0" x2="128" y2="256"><stop offset="0" stop-color="#f6e3b0"/><stop offset=".5" stop-color="#c39a55"/><stop offset="1" stop-color="#6d5029"/></linearGradient>
