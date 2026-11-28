@@ -178,3 +178,14 @@ quality-metrics-steps:
 QUALITY_VIDEO_FILTER ?= null
 quality-video: ship-tools
 	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) $(ROOT_MOUNTS) -w $(ROOT) $(SHIP_TOOLS_IMAGE) ffmpeg -y -framerate 12 -pattern_type glob -i '.cache/quality-video/*/frame-*.png' -vf $(call MOUNT_QUOTE,$(QUALITY_VIDEO_FILTER)) -c:v libvpx-vp9 -threads 2 -pix_fmt yuv420p .cache/quality-video.webm
+
+# Long natural Rust AI matches, one at a time on a stored map package.
+.PHONY: balance-match balance-match-admitted balance-match-steps
+balance-match: resource-bootstrap
+	@$(RESOURCE_LONG) balance-match -- $(MAKE) --no-print-directory balance-match-admitted
+
+balance-match-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory balance-match-steps
+
+balance-match-steps:
+	@$(DOCKER_RUN) nice -n 10 cargo run --release --locked -p aoe-harness -- balance-match $(BALANCE_MATCH_ARGS)

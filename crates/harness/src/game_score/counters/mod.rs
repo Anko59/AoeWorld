@@ -18,7 +18,7 @@ use super::choke::{Choke, ChokeWatch, Moves, Walker};
 use aoe_core::PlayerId;
 use aoe_simulation::GameWorld;
 use arrival::{Orders, Seen};
-use income::Income;
+pub(super) use income::Income;
 use std::time::Duration;
 
 pub(super) struct Recorder {
