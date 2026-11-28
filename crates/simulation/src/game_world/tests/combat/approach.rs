@@ -240,3 +240,25 @@ fn a_fight_over_far_orders_replays_identically_at_every_worker_count() {
         assert_eq!(*run, runs[0]);
     }
 }
+
+#[test]
+fn a_hunter_whose_kill_lies_on_an_island_it_cannot_walk_to_gives_it_up() {
+    let mut w = water_world(true);
+    w.set_fog_disabled(true);
+    let hunter = w.spawn_villager(PlayerId(0), at(101, 100)).unwrap();
+    let deer = w
+        .spawn_animal(crate::AnimalKind::Deer, at(105, 100))
+        .unwrap();
+    w.advance();
+    w.issue_hunt(PlayerId(0), &[hunter], deer).unwrap();
+    for _ in 0..400 {
+        w.advance();
+    }
+    assert!(
+        w.animal(deer).is_some_and(|a| a.hp == 0),
+        "the deer was shot"
+    );
+    // Waiting at a carcass it can never reach would keep it busy for good.
+    assert_eq!(w.hunting_target(hunter), None);
+    assert_eq!(w.unit(hunter).unwrap().task, UnitTask::Idle);
+}
