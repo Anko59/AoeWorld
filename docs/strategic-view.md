@@ -263,10 +263,11 @@ can present again.
 
 ## Local verification
 
-The focused browser regression is `tests/rendering/strategic.play.spec.ts`.
-It exercises identity, private-report filtering, job aggregation, non-overlapping
-labels, resource pixels, historical contacts, reset, layer controls and real
-General selection/march/return to sprite zoom on renderer projects.
+`tests/rendering/strategic/overlays.spec.ts` exercises identity, private-report
+filtering, job aggregation, non-overlapping labels, resource pixels,
+historical contacts, reset and layer controls.
+`tests/rendering/strategic.play.spec.ts` checks General selection, marching
+and the return to sprite zoom on the renderer projects.
 
 `tests/rendering/strategic-capture.play.spec.ts` is an opt-in original-art proof
 for this checkout's dev server on port 8153. The ignored file

@@ -306,7 +306,15 @@ test("an activation rejection allows a fresh map request after Back", async ({
 test("skirmish offers bounded AoE map sizes and persists the selection", async ({
   page,
 }) => {
+  const viewport = { width: 1280, height: 720 };
+  await page.setViewportSize(viewport);
   await setup(page);
+  const panel = await page.locator("#skirmish-form").boundingBox();
+  if (!panel) throw new Error("setup panel is missing");
+  expect(panel.x).toBeGreaterThanOrEqual(0);
+  expect(panel.y).toBeGreaterThanOrEqual(0);
+  expect(panel.x + panel.width).toBeLessThanOrEqual(viewport.width);
+  expect(panel.y + panel.height).toBeLessThanOrEqual(viewport.height);
   const size = page.getByRole("combobox", { name: "Map size", exact: true });
   await expect(size).toHaveValue("480");
   await expect(size.locator("option")).toHaveText([
@@ -316,6 +324,13 @@ test("skirmish offers bounded AoE map sizes and persists the selection", async (
     "Country · 960 km square",
     "Giant · 1,920 km square",
   ]);
+  await expect(page.locator("#skirmish-estimate")).toContainText(
+    "compressed to 16 km in game",
+  );
+  await size.selectOption("30");
+  await expect(page.locator("#skirmish-estimate")).toContainText(
+    "compressed to 1 km in game",
+  );
   await size.selectOption("1920");
   await expect(page.locator("#skirmish-estimate")).toContainText("1,920 km");
   await page.reload();

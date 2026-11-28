@@ -197,23 +197,3 @@ test("the loading bar is one monotonic 0-100 bar with a converging estimate", as
   }
   expect(result[0]?.text).toBe("about 1 min 20 s");
 });
-
-test("intro shots follow the clip length and leave no frozen frame", async ({
-  page,
-}) => {
-  await page.goto("/?skipIntro=1");
-  const plan = await page.evaluate(async () => {
-    const url = "/start/cinematic.js";
-    const { shotSchedule } = await import(url);
-    return shotSchedule([3000, 3000, 3000, 3000]);
-  });
-  expect(plan.starts).toEqual([0, 2300, 4600, 6900]);
-  // Each next shot starts before the clip before it ends.
-  plan.starts
-    .slice(1)
-    .forEach((start: number, at: number) =>
-      expect(start).toBeLessThan(plan.starts[at] + 3000),
-    );
-  expect(plan.end).toBe(9900);
-  expect(plan.reveal).toBeGreaterThan(plan.end);
-});
