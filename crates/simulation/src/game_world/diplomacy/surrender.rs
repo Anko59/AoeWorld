@@ -65,6 +65,7 @@ impl GameWorld {
 
     pub(crate) fn town_center_conquered(&mut self, loser: PlayerId, winner: PlayerId) {
         if self.diplomacy.conquests.ai_seats.contains(&loser)
+            && self.is_enemy(winner, loser)
             && self.validate_diplomacy_pair(loser, winner).is_ok()
             && !self.has_town_center(loser)
         {
