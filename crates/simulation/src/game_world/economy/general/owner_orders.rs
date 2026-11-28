@@ -47,15 +47,25 @@ impl GameWorld {
             prior.destination != Some(destination) || prior.owner_march != Some(attack_move);
         if changed {
             if attack_move {
-                let player = self.unit(id).ok_or(GameWorldError::UnknownEntity)?.player;
-                self.issue_formation_move(
-                    player,
+                let &index = self.lookup.get(&id).ok_or(GameWorldError::UnknownEntity)?;
+                let commander = self.units[index].state;
+                // Admission uses the stance the commander will have on this
+                // march. A refused order leaves the current withdrawal active.
+                if let Some(saved) = prior.stances.iter().flatten().find(|saved| saved.id == id) {
+                    self.units[index].state.stance = saved.original;
+                }
+                let issued = self.issue_formation_move(
+                    commander.player,
                     &[id],
                     aoe_core::Formation::Line,
                     destination,
                     false,
                     true,
-                )?;
+                );
+                if issued.is_err() {
+                    self.units[index].state.stance = commander.stance;
+                }
+                issued?;
                 self.cancel_transport_journey(id);
             } else {
                 self.issue_move(id, destination)?;
