@@ -173,13 +173,13 @@ impl GameWorld {
         let Some(mut planner) = self.units[index].planner.take() else {
             return;
         };
-        // Every 8 reference ticks (0.4 s), and when the endpoints change
+        // Every 40 reference ticks (2 s), and when the endpoints change
         // (#978: asked every tick for every waiting near unit, this was 125M
         // of 352M route-serving instructions a tick on R1).
         let to = planner
             .certified_destination()
             .unwrap_or(planner.destination());
-        let period = self.config.ticks(8);
+        let period = self.config.ticks(40);
         if !planner.take_region_question(planner.origin(), to, self.tick.0, period) {
             self.units[index].planner = Some(planner);
             return;
