@@ -126,6 +126,18 @@ headless test records its observed deposits and training in
 `.cache/economy/headless.log` for the local narrated demonstration.
 Synthetic evidence does not qualify finished RTS performance or hardware.
 
+## Military food upkeep
+
+Each living military unit uses one food per game minute. Scouts, Monks,
+Generals and warships count, including troops in shelters or transports.
+Civilian and management units are exempt. Fractional food accrues each tick,
+carries through save and load, and is deducted when it reaches a whole food.
+
+The food HUD shows the current bill per minute. Missing a payment triggers a
+shortage until food returns. New military training is refused, prepaid queues
+continue, and unit attacks started during a shortage take twice as long to
+ready the next attack. Missed whole-food payments are forgiven.
+
 ## Dark Age buildings
 
 Every building value lives in one table,

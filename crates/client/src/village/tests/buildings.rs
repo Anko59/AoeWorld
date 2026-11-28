@@ -77,6 +77,8 @@ fn rich_player(researched: u128) -> aoe_protocol::GameplayPlayerState {
         unit_counts: [0; aoe_protocol::UnitKind::ALL.len()],
         held_tiles: 0,
         held_share_ppm: 0,
+        food_upkeep_per_minute: 0,
+        food_upkeep_shortage: false,
         market_prices: Default::default(),
     }
 }

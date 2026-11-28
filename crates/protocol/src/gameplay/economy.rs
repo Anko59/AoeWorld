@@ -130,6 +130,10 @@ pub struct GameplayPlayerState {
     /// Exact owned map tiles and millionths of total map area.
     pub held_tiles: u64,
     pub held_share_ppm: u32,
+    /// The living army's current food bill per game minute.
+    pub food_upkeep_per_minute: u32,
+    /// A missed payment with no food left in the stockpile.
+    pub food_upkeep_shortage: bool,
 }
 /// The most recent damage taken. A client plays a hit reaction when `tick`
 /// is newer than the one it last saw, and a swing for `attacker`.

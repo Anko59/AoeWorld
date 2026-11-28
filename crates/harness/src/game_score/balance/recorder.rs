@@ -22,6 +22,8 @@ pub(super) struct PlayerSample {
     pub town_centers: u32,
     pub villagers: u32,
     pub army: u32,
+    pub food_upkeep_per_minute: u32,
+    pub food_upkeep_shortage: bool,
     pub research: Vec<Option<u64>>,
     pub first_contact: Option<Contact>,
     pub first_five_tcs: Option<u64>,
@@ -68,15 +70,10 @@ impl Census {
         if unit.hp == 0 {
             return;
         }
-        match unit.kind {
-            UnitKind::Villager => self.villagers += 1,
-            UnitKind::FishingShip
-            | UnitKind::TransportShip
-            | UnitKind::Steward
-            | UnitKind::Vassal
-            | UnitKind::TradeCart
-            | UnitKind::TradeCog => {}
-            _ => self.army += 1,
+        if unit.kind == UnitKind::Villager {
+            self.villagers += 1;
+        } else if unit.kind.needs_food_upkeep() {
+            self.army += 1;
         }
     }
 }
@@ -236,6 +233,8 @@ impl Recorder {
                         army: count.army,
                     });
                 }
+                let (food_upkeep_per_minute, food_upkeep_shortage) =
+                    world.food_upkeep(player.player);
                 PlayerSample {
                     player: player.player,
                     age: player.age,
@@ -246,6 +245,8 @@ impl Recorder {
                     town_centers: count.town_centers,
                     villagers: count.villagers,
                     army: count.army,
+                    food_upkeep_per_minute,
+                    food_upkeep_shortage,
                     research: seat.research.clone(),
                     first_contact: seat.first_contact.clone(),
                     first_five_tcs: seat.first_five_tcs,

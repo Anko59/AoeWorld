@@ -31,7 +31,7 @@ export async function explorationFixture(
         socket.send(
           Buffer.from([
             0,
-            4,
+            35,
             1,
             1,
             ...Array<number>(32).fill(2),

@@ -30,6 +30,7 @@ mod resource_collision;
 mod roads;
 mod steward;
 mod training;
+mod upkeep;
 mod vassal;
 #[path = "economy/navigation/village_routes.rs"]
 mod village_routes;

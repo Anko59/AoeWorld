@@ -265,6 +265,7 @@ fn fixtures_load_a_small_save_and_reject_its_snapshot_version() {
     let world = aoe_simulation::GameWorld::new(Default::default()).unwrap();
     let version = u8::try_from(world.snapshot([0; 32]).unwrap().version).unwrap();
     // Minimal current postcard save: save header, zero seats, empty snapshot.
+    // With no player entries, there are no food-upkeep progress fields.
     // This is a synthetic current-format pin, never a compatibility reader.
     // Both versions come from their constants: a literal here would fail the
     // next time either is bumped, which is a save-format change, not a defect.

@@ -64,6 +64,8 @@ async fn placement_preview_rejects_a_relic_on_the_interior_tile() {
         unit_counts: [0; UnitKind::ALL.len()],
         held_tiles: 0,
         held_share_ppm: 0,
+        food_upkeep_per_minute: 0,
+        food_upkeep_shortage: false,
         market_prices: Default::default(),
     });
     client.fog.apply(FogState {

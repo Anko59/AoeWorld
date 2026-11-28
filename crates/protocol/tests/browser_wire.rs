@@ -228,6 +228,8 @@ fn snapshot() -> GameplayServerMessage {
             unit_counts: [0; aoe_protocol::UnitKind::ALL.len()],
             held_tiles: 0,
             held_share_ppm: 0,
+            food_upkeep_per_minute: 0,
+            food_upkeep_shortage: false,
             market_prices: aoe_protocol::MarketPrices::default(),
         }],
         buildings: vec![GameplayBuildingState {
@@ -289,6 +291,24 @@ fn browser_building_fixture_matches_current_decoder() {
         decode_gameplay_server(&browser_bytes()).unwrap(),
         snapshot()
     );
+}
+
+#[test]
+fn the_upkeep_rate_and_shortage_have_a_pinned_wire_form() {
+    let mut message = snapshot();
+    let GameplayServerMessage::Snapshot { players, .. } = &mut message else {
+        unreachable!()
+    };
+    players[0].food_upkeep_per_minute = 300;
+    players[0].food_upkeep_shortage = true;
+    let mut expected = browser_bytes();
+    let economy_end = 17
+        + hex(include_str!(
+            "../../../browser/tests/wire/player-economy-tail.hex"
+        ))
+        .len();
+    expected.splice(economy_end - 2..economy_end, [172, 2, 1]);
+    assert_wire(message, expected);
 }
 
 #[test]

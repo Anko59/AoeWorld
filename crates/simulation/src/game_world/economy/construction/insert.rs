@@ -71,6 +71,8 @@ impl GameWorld {
             player,
             stockpile: Stockpile::default(),
             population_used,
+            upkeep_remainder: 0,
+            upkeep_shortage: false,
             population_cap: 0,
             age: crate::Age::Dark,
             researched: 0,

@@ -43,7 +43,7 @@ export async function fiveVillagerFixture(
         socket.send(
           Buffer.from([
             0,
-            4,
+            35,
             1,
             0,
             0,

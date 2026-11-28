@@ -35,7 +35,7 @@ export async function workerFixture(
         socket.send(
           Buffer.from([
             0,
-            4,
+            35,
             1,
             0,
             0,

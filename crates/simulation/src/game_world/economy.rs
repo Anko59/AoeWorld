@@ -50,6 +50,8 @@ pub use gathering::GatherWork;
 pub(crate) use state::Economy;
 pub use tick::TickPhase;
 pub(crate) mod training;
+#[path = "economy/state/upkeep.rs"]
+mod upkeep;
 pub use training::rally::{RallyPoint, RallyTarget};
 #[path = "economy/construction/bridge.rs"]
 pub(crate) mod bridge;
@@ -230,6 +232,8 @@ pub struct PlayerEconomy {
     pub player: PlayerId,
     pub stockpile: Stockpile,
     pub population_used: u32,
+    pub(crate) upkeep_remainder: u32,
+    pub(crate) upkeep_shortage: bool,
     /// Space provided by completed owned buildings; no gameplay maximum.
     pub population_cap: u32,
     pub age: super::Age,
@@ -308,7 +312,7 @@ pub enum EconomyError {
     WrongUnitKind,
     #[error("resource node is unknown or exhausted")]
     InvalidResource,
-    #[error("not enough food to train a villager")]
+    #[error("not enough food to train the unit")]
     InsufficientFood,
     #[error("population space is full")]
     PopulationCap,

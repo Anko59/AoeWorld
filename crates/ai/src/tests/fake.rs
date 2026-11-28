@@ -159,6 +159,8 @@ pub fn node(id: u64, kind: ResourceKind, tile: Tile) -> Node {
 pub fn economy() -> Economy {
     Economy {
         food: 200,
+        food_upkeep_per_minute: 0,
+        food_upkeep_shortage: false,
         wood: 200,
         gold: 100,
         stone: 200,

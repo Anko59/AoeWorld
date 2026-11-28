@@ -113,7 +113,7 @@ export async function bundleProof(page: Page, url: string, film = false) {
         socket.send(
           Buffer.from([
             0,
-            4,
+            35,
             1,
             0,
             0,

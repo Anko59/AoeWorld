@@ -19,6 +19,8 @@ fn balance_records_first_sighting_and_census_at_the_sighting_tick() {
     assert_eq!(initial.players[0].town_centers, 1);
     assert_eq!(initial.players[0].villagers, 3);
     assert_eq!(initial.players[0].army, 1);
+    assert_eq!(initial.players[0].food_upkeep_per_minute, 1);
+    assert!(!initial.players[0].food_upkeep_shortage);
     assert_eq!(initial.players[0].delivered, [0; 4]);
     assert!(initial.players[0].first_contact.is_none());
 

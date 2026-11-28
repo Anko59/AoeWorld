@@ -238,6 +238,8 @@ impl From<aoe_sdk::Animal> for Animal {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Economy {
     pub food: u32,
+    pub food_upkeep_per_minute: u32,
+    pub food_upkeep_shortage: bool,
     pub wood: u32,
     pub gold: u32,
     pub stone: u32,
@@ -273,6 +275,8 @@ impl From<aoe_sdk::Economy> for Economy {
         let prices = economy.market_prices();
         Self {
             food: s.food,
+            food_upkeep_per_minute: economy.state.food_upkeep_per_minute,
+            food_upkeep_shortage: economy.state.food_upkeep_shortage,
             wood: s.wood,
             gold: s.gold,
             stone: s.stone,

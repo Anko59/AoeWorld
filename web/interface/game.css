@@ -24,6 +24,9 @@ button:disabled { color:#9b9f8e; opacity:.55; cursor:default; }
 .counter small { display:block; font-size:9px; letter-spacing:.07em; color:var(--muted); }
 .worker-count { align-self:flex-end; display:flex; gap:1px; font-size:10px; color:#c4c7b3; margin:0 0 4px -4px; }
 .worker-count .icon { width:12px; height:12px; opacity:.8; }
+#food-upkeep { font-size:11px; color:#e1c994; white-space:nowrap; }
+.food-counter { position:relative; }
+#food-upkeep-shortage { position:absolute; top:calc(100% + 12px); left:0; padding:4px 8px; border:1px solid #99845b; background:#242a23; font-size:11px; color:#ffb18a; white-space:nowrap; }
 #idle-villagers,#idle-military { display:flex; align-items:center; gap:4px; white-space:nowrap; }
 #idle-villagers .icon,#idle-military .icon { width:20px; height:20px; }
 .population { margin-left:3px; border-left:1px solid #77745a; padding-left:13px; min-width:91px; }

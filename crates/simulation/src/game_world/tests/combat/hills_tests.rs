@@ -307,6 +307,8 @@ fn hilltop_house() -> (GameWorld, EntityId, EntityId, EntityId) {
                 stone: 10000,
             },
             population_used: 0,
+            upkeep_remainder: 0,
+            upkeep_shortage: false,
             population_cap: 200,
             age: crate::Age::Feudal,
             researched: crate::Tech::FeudalAge.bit(),

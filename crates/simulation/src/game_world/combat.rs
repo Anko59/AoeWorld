@@ -382,12 +382,20 @@ impl GameWorld {
 
     pub(crate) fn attack_period_ticks(&self, unit: &GameUnit) -> u32 {
         let mut centiseconds = unit_combat(unit.kind).attack_period_centiseconds;
-        let researched = self.player_economy(unit.player).map_or(0, |p| p.researched);
+        let economy = self.economy.players.get(&unit.player);
+        let researched = economy.map_or(0, |p| p.researched);
         if researched & crate::Tech::ThumbRing.bit() != 0
             && (unit.kind.is_archery() || unit.kind.is_mounted_archer())
         {
             centiseconds = centiseconds * 100 / 115;
         }
-        (self.config.tick_hz.saturating_mul(centiseconds) / 100).max(1)
+        let period = (self.config.tick_hz.saturating_mul(centiseconds) / 100).max(1);
+        if unit.kind.needs_food_upkeep()
+            && economy.is_some_and(|p| p.upkeep_shortage && p.stockpile.food == 0)
+        {
+            period.saturating_mul(2)
+        } else {
+            period
+        }
     }
 }

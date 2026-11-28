@@ -30,7 +30,9 @@ impl ManagementManager {
             .cloned()
             .collect();
         for general in generals {
-            let enabled = cfg.general_train && !(ctx.saving_castle || ctx.production_drain);
+            let enabled = cfg.general_train
+                && !(ctx.saving_castle || ctx.production_drain)
+                && crate::roster::has_army_supplies(ctx, 0);
             if !ctx.board.generals.contains(&general.id) {
                 let order = Order::GeneralMix {
                     unit: EntityId(general.id),

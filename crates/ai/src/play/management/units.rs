@@ -184,7 +184,7 @@ impl ManagementManager {
             if ctx.board.cooling(&key, ctx.tick) || ctx.free_population() <= 0 {
                 continue;
             }
-            if ctx.try_spend(cost)? {
+            if crate::roster::can_recruit(ctx, kind) && ctx.try_spend(cost)? {
                 let order = Order::Train {
                     building: EntityId(id),
                     kind,

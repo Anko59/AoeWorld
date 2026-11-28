@@ -73,7 +73,7 @@ export async function barrierArt(page: Page, url: string) {
         socket.send(
           Buffer.from([
             0,
-            7,
+            35,
             1,
             0,
             0,

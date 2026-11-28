@@ -42,7 +42,7 @@ export async function ownersFixture(page: Page, awayFromPlace = 0) {
         socket.send(
           Buffer.from([
             0,
-            4,
+            35,
             1,
             0,
             0,

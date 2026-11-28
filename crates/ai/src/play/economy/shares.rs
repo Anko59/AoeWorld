@@ -81,5 +81,20 @@ pub fn shares(ctx: &Context<'_>) -> [f64; 4] {
         shares[GOLD] = 0.0;
         shares[STONE] = 0.0;
     }
+    // Additional food jobs cover the army's running costs. Keep the basic
+    // distribution of the other jobs so the extra farms still have timber.
+    let upkeep_workers =
+        f64::from(eco.food_upkeep_per_minute) / f64::from(cfg.upkeep_food_per_worker_minute.max(1));
+    let shift = (upkeep_workers / villagers.max(1) as f64).min(cfg.upkeep_max_food_share);
+    if shift > 0.0 {
+        let other: f64 = [WOOD, GOLD, STONE].into_iter().map(|k| shares[k]).sum();
+        let transfer = shift.min(other);
+        if other > 0.0 {
+            for key in [WOOD, GOLD, STONE] {
+                shares[key] *= 1.0 - transfer / other;
+            }
+            shares[FOOD] += transfer;
+        }
+    }
     shares
 }

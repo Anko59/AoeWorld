@@ -221,6 +221,8 @@ fn combat_state_round_trips_for_units_and_buildings() {
             unit_counts: [0; aoe_protocol::UnitKind::ALL.len()],
             held_tiles: 0,
             held_share_ppm: 0,
+            food_upkeep_per_minute: 0,
+            food_upkeep_shortage: false,
             market_prices: aoe_protocol::MarketPrices::default(),
         }],
         buildings: vec![center(1)],
