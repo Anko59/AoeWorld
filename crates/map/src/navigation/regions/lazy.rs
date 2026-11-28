@@ -355,6 +355,15 @@ impl Regions {
         target: TileCoord,
     ) -> Option<TileCoord> {
         let start = self.lazy_node(ground, from)?;
+        if let Some(all) = self.proofs.reach(player, start) {
+            if self
+                .lazy_node(ground, target)
+                .is_some_and(|goal| all.contains(&goal))
+            {
+                return Some(target);
+            }
+            return self.frontier_within(&all, from, target);
+        }
         let mut reach = Reach::default();
         if let Some(goal) = self.lazy_node(ground, target)
             && self.connected_learning(ground, player, (start, goal), &mut reach)
@@ -372,7 +381,8 @@ impl Regions {
         while ground.available() {
             // Once the start's whole reach is known, the answer lies in its
             // own chunks: no chunk of the unreachable side is read (#978).
-            if let Some(all) = reach.all.take() {
+            if let Some(all) = reach.all.take().map(std::sync::Arc::new) {
+                self.proofs.keep_reach(player, start, all.clone());
                 return self.frontier_within(&all, from, target);
             }
             let Some((distance, chunk)) = queue.pop_first() else {

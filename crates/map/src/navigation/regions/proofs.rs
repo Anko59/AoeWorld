@@ -1,7 +1,9 @@
 //! Exact directed answers shared by walkers and contacts on the same regions.
 use super::{Regions, label};
 use aoe_core::TileCoord;
+use std::collections::{BTreeSet, HashMap};
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::sync::Arc;
 
 pub(super) type Node = (u32, u16);
 const SLOTS: usize = 2048;
@@ -28,6 +30,10 @@ struct Proof {
 pub(super) struct Proofs {
     generation: u64,
     slots: Box<[Option<Proof>]>,
+    /// A start's whole reach per player, as a frontier walk learned it: the
+    /// next walk from it reads its own chunks only (#1179). Cleared with the
+    /// proofs, so a ground edit cannot leave a stale reach.
+    reaches: HashMap<(u32, Node), Arc<BTreeSet<Node>>>,
 }
 
 impl Proofs {
@@ -35,6 +41,15 @@ impl Proofs {
         // An edit anywhere on the connecting path (or between failed
         // frontiers) can change its answer. Leave old slots to be replaced.
         self.generation += 1;
+        self.reaches.clear();
+    }
+
+    pub(super) fn reach(&self, player: u32, start: Node) -> Option<Arc<BTreeSet<Node>>> {
+        self.reaches.get(&(player, start)).cloned()
+    }
+
+    pub(super) fn keep_reach(&mut self, player: u32, start: Node, all: Arc<BTreeSet<Node>>) {
+        self.reaches.insert((player, start), all);
     }
 
     pub(super) fn get(&self, query: Query) -> Option<bool> {
