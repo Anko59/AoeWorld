@@ -25,26 +25,15 @@ impl GameWorld {
         let from = unit.position.tile_floor();
         // Buildings come from the shared drop-off rule; only the failed or
         // blocked perimeter tiles of each are skipped.
-        let mut order = self.dropoff_order(unit.player, from, task.kind);
-        order.retain(|building_id| {
-            self.building(*building_id).is_some_and(|b| {
-                if !self
-                    .managed_target_allowed(id, position(b.footprint.min).unwrap_or(unit.position))
-                {
-                    return false;
-                }
-                if unit.kind == UnitKind::FishingShip {
-                    b.kind == super::super::BuildingKind::Dock
-                } else {
-                    b.kind != super::super::BuildingKind::Dock || task.fish.is_some()
-                }
-            })
-        });
-        let has_dropoff = !order.is_empty();
+        // Nearest first; a building's eligibility is checked only when the
+        // attempts reach it (#978: checking the player's every drop-off for
+        // each return was most of gathering on the 5x save).
+        let order = self.dropoff_order(unit.player, from, task.kind);
+        let fish = task.fish.is_some();
+        let mut has_dropoff = false;
         self.count_gather(Count::Returns, 1);
         let farmer = u64::from(task.farm.is_some());
         self.count_gather(Count::FarmReturns, farmer);
-        self.count_gather(Count::ReturnBuildings, order.len() as u64);
         // Ranking a building's perimeter sweeps nearby bodies per tile, so
         // buildings are ranked only as the attempts reach them, nearest first.
         // Tiles that failed before this call stay excluded; the same tile
@@ -54,6 +43,11 @@ impl GameWorld {
         let mut pocket = None;
         let mut probed_origin = false;
         'buildings: for (at, &building) in order.iter().enumerate() {
+            if !self.return_dropoff_allowed(id, unit, fish, building) {
+                continue;
+            }
+            has_dropoff = true;
+            self.count_gather(Count::ReturnBuildings, 1);
             let tiles = self.dropoff_tiles(id, building, &failed_before, from);
             for (n, &tile) in tiles.iter().enumerate() {
                 let known = self.reject_known_unreachable_task_move(id, tile, pocket.as_ref());
@@ -105,8 +99,14 @@ impl GameWorld {
                     // Untried candidates keep the job: the rest of this
                     // perimeter or any later building's.
                     let failed = &task.failed_dropoffs;
+                    let later: Vec<_> = order[at + 1..]
+                        .iter()
+                        .copied()
+                        .filter(|&later| self.return_dropoff_allowed(id, unit, fish, later))
+                        .collect();
+                    has_dropoff |= !later.is_empty();
                     untried = tiles[n + 1..].iter().any(|t| !failed.contains(t))
-                        || order[at + 1..].iter().any(|&later| {
+                        || later.iter().any(|&later| {
                             !self.dropoff_tiles_unranked(id, later, failed).is_empty()
                         });
                     break 'buildings;
@@ -130,6 +130,25 @@ impl GameWorld {
         // waits for a route or replacement drop-off. Other exhausted node
         // jobs can release their reservations and choose another resource.
         task.farm.is_some() || !has_dropoff || untried
+    }
+
+    /// Whether `unit` may return to `building`: inside a managed worker's
+    /// domain, and a Dock only for a fishing load (always for a fishing ship).
+    fn return_dropoff_allowed(
+        &self,
+        id: EntityId,
+        unit: crate::GameUnit,
+        fish: bool,
+        building: EntityId,
+    ) -> bool {
+        self.economy.buildings.get(&building).is_some_and(|b| {
+            self.managed_target_allowed(id, position(b.footprint.min).unwrap_or(unit.position))
+                && if unit.kind == UnitKind::FishingShip {
+                    b.kind == super::super::BuildingKind::Dock
+                } else {
+                    b.kind != super::super::BuildingKind::Dock || fish
+                }
+        })
     }
 
     /// A drop-off's usable perimeter tiles: passable, unblocked, not failed
