@@ -3,7 +3,7 @@ use aoe_core::{EntityId, PlayerId, TileCoord};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::borrow::Cow;
 
-pub use aoe_core::DiplomaticStance;
+pub use aoe_core::{DiplomacyEntry, DiplomacyMessage, DiplomaticStance, MAX_DIPLOMACY_LOG};
 
 pub const MAX_DIPLOMACY_NAME: usize = 96;
 
@@ -41,6 +41,9 @@ pub struct DiplomacyView {
     pub markets: Vec<AlliedMarket>,
     pub tribute_market: Option<EntityId>,
     pub tribute_fee_permyriad: u16,
+    #[serde(deserialize_with = "bounded_log")]
+    pub log: Vec<DiplomacyEntry>,
+    pub surrendered_to: Option<PlayerId>,
 }
 
 impl DiplomacyView {
@@ -62,6 +65,16 @@ impl DiplomacyView {
     pub(super) fn valid(&self) -> bool {
         self.revision > 0
             && self.tribute_fee_permyriad <= 10_000
+            && self.log.len() <= MAX_DIPLOMACY_LOG
+            && self.log.windows(2).all(|pair| pair[0].id < pair[1].id)
+            && self.log.iter().all(|entry| {
+                entry.id != 0
+                    && entry.from != entry.to
+                    && (entry.from == self.viewer || entry.to == self.viewer)
+                    && (entry.message == DiplomacyMessage::Surrender
+                        || entry.message.valid_request())
+            })
+            && self.surrendered_to != Some(self.viewer)
             && self.seats.len() <= MAX_ECONOMY_PLAYERS
             && self.markets.len() <= MAX_RETAINED_BUILDINGS
             && self
@@ -106,4 +119,8 @@ fn bounded_seats<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<DiplomacySeat>, 
 
 fn bounded_markets<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<AlliedMarket>, D::Error> {
     bounded::<D, _, MAX_RETAINED_BUILDINGS>(d)
+}
+
+fn bounded_log<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<DiplomacyEntry>, D::Error> {
+    bounded::<D, _, MAX_DIPLOMACY_LOG>(d)
 }

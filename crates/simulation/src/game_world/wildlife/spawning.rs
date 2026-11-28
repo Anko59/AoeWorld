@@ -4,6 +4,22 @@ use crate::{EconomyError, GameWorld};
 use aoe_core::{EntityId, TileCoord, WorldPosition};
 
 impl GameWorld {
+    pub(crate) fn transfer_conquered_herds(
+        &mut self,
+        from: aoe_core::PlayerId,
+        to: aoe_core::PlayerId,
+    ) {
+        for (&id, animal) in &mut self.wildlife.animals {
+            if animal.state.owner == Some(from) {
+                animal.state.owner = Some(to);
+                animal.herd = None;
+                animal.speed_carry = 0;
+                animal.state.moving = false;
+                self.wildlife.engaged.remove(&id);
+            }
+        }
+    }
+
     /// Living animals as a save keeps them (carcasses are not kept).
     pub(crate) fn animal_records(&self) -> Vec<AnimalRecord> {
         self.animal_records_of(|_| true)

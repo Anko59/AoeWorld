@@ -51,7 +51,7 @@ test("camera demand aborts a full old window without backoff or exceeding 64", a
   const center = unsigned((8192 * 1024 + 512) * 2);
   const welcome = Buffer.from([
     0,
-    4,
+    35,
     1,
     1,
     ...Array<number>(32).fill(2),

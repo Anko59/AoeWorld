@@ -38,3 +38,50 @@ impl GameWorld {
         Ok((world, [host, visitor]))
     }
 }
+
+impl GameWorld {
+    pub fn diplomacy_conquest_demo(
+        seed: aoe_core::Seed,
+    ) -> Result<(Self, [EntityId; 2]), EconomyError> {
+        use aoe_core::{TileRect, WorldConfig, WorldPosition};
+        let mut world = Self::new(
+            WorldConfig::new(256, 256, seed).map_err(|_| EconomyError::InvalidFootprint)?,
+        )?;
+        let human = PlayerId(0);
+        let ai = PlayerId(1);
+        let host = world.initialize_village(human, TileCoord::new(96, 101))?;
+        let visitor = world.initialize_village(ai, TileCoord::new(125, 101))?;
+        for (player, x) in [(human, 95), (ai, 122)] {
+            world.insert_building(
+                player,
+                BuildingKind::Market,
+                TileRect::from_xywh(x, 111, 4, 4),
+                true,
+            )?;
+        }
+        let center = world
+            .player_buildings_of(ai, BuildingKind::TownCenter)
+            .next()
+            .ok_or(EconomyError::UnknownEntity)?
+            .id;
+        world
+            .building_mut(center)
+            .ok_or(EconomyError::UnknownEntity)?
+            .hp = 500;
+        world
+            .economy
+            .players
+            .get_mut(&ai)
+            .ok_or(EconomyError::InvalidDiplomaticSeat)?
+            .stockpile
+            .food = 3_000;
+        world.set_diplomatic_stance(human, ai, DiplomaticStance::Neutral)?;
+        world.set_diplomatic_stance(ai, human, DiplomaticStance::Neutral)?;
+        for y in 98..=103 {
+            let at = WorldPosition::from_tile_center(TileCoord::new(116, y))
+                .map_err(|_| EconomyError::InvalidFootprint)?;
+            world.spawn_kind(human, crate::UnitKind::BombardCannon, at)?;
+        }
+        Ok((world, [host, visitor]))
+    }
+}

@@ -128,6 +128,12 @@ impl GameplayService {
             .map(|setup| setup.player)
             .collect();
         world.set_human_seats(&humans);
+        let ai_seats: Vec<_> = setups
+            .iter()
+            .filter(|seat| !seat.human)
+            .map(|seat| seat.player)
+            .collect();
+        world.set_diplomacy_ai_seats(&ai_seats);
         let slots = setups
             .into_iter()
             .zip(1..)

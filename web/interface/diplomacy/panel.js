@@ -1,3 +1,4 @@
+import { diplomacyMessages } from './messages.js';
 import { icon } from '/interface/ui-art.js';
 import { actorColour } from '/minimap.js';
 
@@ -46,6 +47,7 @@ export function initDiplomacy() {
     result.textContent = 'Sending…';
     window.aoeBuildings.command(action, code, player, count);
   };
+  const messages = diplomacyMessages(order, amount, resource, resources, panel);
   function row(player, stance, offer, colour, name, hasMarket) {
     const line = element('tr');
     const label = element('th', name);
@@ -106,15 +108,18 @@ export function initDiplomacy() {
         fee.textContent = hasMarket ? `Tribute fee ${rate / 100}%` : 'Tribute requires a completed Market.';
         const rows = [];
         const players = [];
+        const seats = new Map();
         for (let i = 0; i < names.length; i++) {
           const [player, stance, offer, colour] = info.subarray(5 + i * 4, 9 + i * 4);
           const name = player === viewer ? 'You' : names[i] ?? `Player ${player + 1}`;
+          seats.set(player, { name, stance });
           const item = element('li', name);
           item.className = 'diplomacy-name';
           item.style.setProperty('--seat-colour', actorColour(colour));
           players.push(item);
           if (player !== viewer) rows.push(row(player, stance, offer, colour, name, hasMarket));
         }
+        messages.setPlayers(viewer, seats);
         body.replaceChildren(...rows);
         roster.replaceChildren(...players);
       }
@@ -126,11 +131,13 @@ export function initDiplomacy() {
       }
       if (markets.getAttribute('d') !== path) markets.setAttribute('d', path);
     },
+    log(entries) { messages.log(entries); },
     result(accepted) {
       if (!pending) return;
       result.textContent = accepted ? pending.message
         : pending.action === 21 ? 'Diplomacy order refused. End fighting before offering an alliance.'
-          : 'Tribute refused. Check your Market and available resources.';
+          : pending.action === 22 ? 'Tribute refused. Check your Market and available resources.'
+            : 'This diplomatic request could not be completed.';
       pending = undefined;
     }
   };

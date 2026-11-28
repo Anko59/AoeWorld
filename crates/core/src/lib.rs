@@ -3,6 +3,10 @@ mod bridge;
 pub use bridge::{BridgeSpan, raster_bridge_line, snap_bridge_start};
 mod clamp;
 mod combat;
+mod diplomacy;
+pub use diplomacy::{
+    DiplomacyEntry, DiplomacyLog, DiplomacyMessage, MAX_DIPLOMACY_LOG, ResourceKind,
+};
 mod coordinates;
 mod tile_line;
 pub use combat::{CombatStance, DiplomaticStance};

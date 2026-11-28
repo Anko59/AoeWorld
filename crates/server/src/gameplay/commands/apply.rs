@@ -39,6 +39,9 @@ pub(in crate::gameplay) fn apply(
     if world.relic_winner().is_some() {
         return CommandResult::RejectedInvalidTarget;
     }
+    if world.surrendered_to(player).is_some() {
+        return CommandResult::RejectedNotOwner;
+    }
     let commanded = commanded_units(&action);
     let result = match action {
         PendingAction::Diplomacy {
@@ -51,18 +54,16 @@ pub(in crate::gameplay) fn apply(
                 world.set_diplomatic_stance(player, other, stance)
             }
         }
+        PendingAction::DiplomacyMessage {
+            player: other,
+            message,
+        } => world.send_diplomacy(player, other, message),
         PendingAction::Tribute {
             player: other,
             market,
             resource,
             amount,
-        } => world.issue_tribute(
-            player,
-            other,
-            market,
-            super::diplomacy::native_resource(resource),
-            amount,
-        ),
+        } => world.issue_tribute(player, other, market, resource, amount),
         PendingAction::Relic(action) => match action {
             aoe_protocol::RelicAction::PickUp { monk, relic } => {
                 world.issue_pickup_relic(player, monk, relic)

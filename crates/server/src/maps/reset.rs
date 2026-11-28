@@ -22,6 +22,12 @@ pub(crate) async fn reset(
                 Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
             }
         }
+        Some("diplomacy-conquest") => {
+            match GameplayService::diplomacy_conquest_demo(state.diagnostic_scenario.seed) {
+                Ok(service) => service,
+                Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
+            }
+        }
         Some("relics") => {
             let Ok((world, monk)) =
                 aoe_simulation::GameWorld::relic_demo(state.diagnostic_scenario.seed)
@@ -219,7 +225,10 @@ pub(crate) async fn reset(
     };
     *state.gameplay.write().await = service;
     state.generation.fetch_add(1, Ordering::SeqCst);
-    if options.scenario.as_deref() == Some("diplomacy") {
+    if matches!(
+        options.scenario.as_deref(),
+        Some("diplomacy" | "diplomacy-conquest")
+    ) {
         crate::gameplay_match::play_ai_seats(&state, crate::AiRuntime::Rust).await;
     }
     StatusCode::NO_CONTENT

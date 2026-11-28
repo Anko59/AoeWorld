@@ -1,6 +1,8 @@
 //! The player: one `Brain` per slot, called at every decision point
 //! (`ai/aoe_ai/brain.py`). It learns from the server's verdicts and keeps the
 //! peak statistics; the managers run after that, in priority order.
+mod diplomacy;
+
 use aoe_sdk::{Age, BuildingKind, CommandResult, EntityId, Event, Order};
 
 use crate::blackboard::{Blackboard, Tracked};
@@ -69,34 +71,16 @@ impl Brain {
         if ctx.economy.is_none() {
             return;
         }
-        accept_alliances(&mut ctx);
+        if ctx
+            .world
+            .diplomacy()
+            .is_some_and(|view| view.surrendered_to.is_some())
+        {
+            return;
+        }
+        diplomacy::step(&mut ctx);
         run_managers(&mut ctx);
         ctx.board.bump("decisions");
-    }
-}
-
-/// The view carries only proposals still eligible to accept.
-fn accept_alliances(ctx: &mut Context<'_>) {
-    let Some(view) = ctx.world.diplomacy() else {
-        return;
-    };
-    for offer in view
-        .seats
-        .iter()
-        .filter(|seat| seat.offer == aoe_sdk::AllianceOffer::Received)
-    {
-        if ctx
-            .order(
-                "accept_alliance",
-                Order::Diplomacy {
-                    player: offer.player,
-                    stance: aoe_sdk::DiplomaticStance::Ally,
-                },
-            )
-            .is_none()
-        {
-            break;
-        }
     }
 }
 
@@ -225,6 +209,12 @@ pub fn absorb(ctx: &mut Context<'_>) {
         match event {
             Event::OrderResult { sequence, result } => {
                 let tracked = ctx.board.tracked.remove(sequence);
+                if tracked
+                    .as_ref()
+                    .is_some_and(|order| order.name == "allied_mission")
+                {
+                    diplomacy::mission_result(ctx, *sequence, *result);
+                }
                 if *result == CommandResult::Accepted {
                     ctx.board.bump("accepted");
                     continue;
@@ -261,6 +251,14 @@ pub fn absorb(ctx: &mut Context<'_>) {
 pub fn on_rejected(ctx: &mut Context<'_>, tracked: &Tracked, result: CommandResult) {
     let (tick, hz) = (ctx.tick, u64::from(ctx.world.tick_hz()));
     let config = ctx.config;
+    if let Order::DiplomacyMessage {
+        message: aoe_sdk::DiplomacyMessage::Reply { request, accepted },
+        ..
+    } = tracked.order
+    {
+        diplomacy::refused(ctx, request, accepted);
+        return;
+    }
     let mem = &mut *ctx.board;
     let name = tracked.name.as_str();
     match &tracked.order {

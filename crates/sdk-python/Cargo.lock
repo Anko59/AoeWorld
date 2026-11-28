@@ -65,6 +65,7 @@ dependencies = [
  "aoe-map",
  "aoe-scenario",
  "blake3",
+ "postcard",
  "rayon",
  "serde",
  "thiserror",

@@ -5,6 +5,12 @@ use aoe_map::ResourceKind;
 use std::collections::{BTreeMap, BTreeSet};
 
 mod demo;
+mod messages;
+mod surrender;
+mod transfer;
+pub(crate) use messages::History;
+pub(crate) use surrender::Conquests;
+pub(crate) use transfer::reset_conquered_unit;
 #[cfg(test)]
 mod tests;
 
@@ -14,6 +20,8 @@ pub(crate) type StanceRecord = (PlayerId, PlayerId, DiplomaticStance);
 
 #[derive(Debug, Default)]
 pub(crate) struct Diplomacy {
+    pub(crate) history: History,
+    pub(crate) conquests: Conquests,
     stances: BTreeMap<(PlayerId, PlayerId), DiplomaticStance>,
     pub(crate) last_hostile_ticks: BTreeMap<(PlayerId, PlayerId), u64>,
     // Recipient first, so an AI only reads offers sent to its own seat.
@@ -41,6 +49,8 @@ impl Diplomacy {
     }
 
     pub(crate) fn hash(&self, hash: &mut blake3::Hasher) {
+        self.history.hash(hash);
+        self.conquests.hash(hash);
         if !self.last_hostile_ticks.is_empty() {
             hash.update(b"recent hostile damage\0");
             hash.update(&(self.last_hostile_ticks.len() as u64).to_le_bytes());
@@ -118,6 +128,8 @@ impl GameWorld {
 
     fn validate_diplomacy_pair(&self, from: PlayerId, to: PlayerId) -> Result<(), EconomyError> {
         if from == to
+            || self.surrendered_to(from).is_some()
+            || self.surrendered_to(to).is_some()
             || !self.economy.players.contains_key(&from)
             || !self.economy.players.contains_key(&to)
         {
@@ -173,19 +185,20 @@ impl GameWorld {
     }
 
     /// Default enemy targeting is separate from declaring or actively fighting a war.
+    pub fn recently_fought(&self, a: PlayerId, b: PlayerId) -> bool {
+        self.diplomacy
+            .last_hostile_ticks
+            .get(&seat_pair(a, b))
+            .is_some_and(|&tick| {
+                self.tick.0.saturating_sub(tick)
+                    < u64::from(self.config.tick_hz) * HOSTILITY_SECONDS
+            })
+    }
+
     pub fn at_war(&self, a: PlayerId, b: PlayerId) -> bool {
         let declared =
             |from, to| self.diplomacy.stances.get(&(from, to)) == Some(&DiplomaticStance::Enemy);
-        declared(a, b)
-            || declared(b, a)
-            || self
-                .diplomacy
-                .last_hostile_ticks
-                .get(&seat_pair(a, b))
-                .is_some_and(|&tick| {
-                    self.tick.0.saturating_sub(tick)
-                        < u64::from(self.config.tick_hz) * HOSTILITY_SECONDS
-                })
+        declared(a, b) || declared(b, a) || self.recently_fought(a, b)
     }
 
     pub fn offer_alliance(&mut self, from: PlayerId, to: PlayerId) -> Result<(), EconomyError> {

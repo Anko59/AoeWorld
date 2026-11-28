@@ -138,6 +138,8 @@ impl GameWorld {
             hp_quarters: self.combat.hp_quarters.clone(),
             players: self.economy.players.values().copied().collect(),
             stances: self.diplomacy.records().collect(),
+            diplomacy_history: self.diplomacy.history.clone(),
+            conquests: self.diplomacy.conquests.clone(),
             alliance_offers: self.diplomacy.offers.iter().copied().collect(),
             last_hostile_ticks: self
                 .diplomacy
@@ -203,6 +205,14 @@ impl GameWorld {
         if !snapshot.entity_ids_fit() {
             return Err(SnapshotError::EntityIds);
         }
+        let players = snapshot
+            .players
+            .iter()
+            .map(|player| player.player)
+            .collect();
+        if !snapshot.diplomacy_history.valid(&players) || !snapshot.conquests.valid(&players) {
+            return Err(SnapshotError::Diplomacy);
+        }
         let snapshot = snapshot.clone().retimed(REFERENCE_HZ, self.config.tick_hz);
         probe(RestorePhase::Rest);
         if let Some(resources) = &snapshot.resources {
@@ -218,6 +228,8 @@ impl GameWorld {
             self.economy.players.insert(player.player, *player);
         }
         self.diplomacy.restore(&snapshot.stances);
+        self.diplomacy.history = snapshot.diplomacy_history.clone();
+        self.diplomacy.conquests = snapshot.conquests.clone();
         self.diplomacy
             .offers
             .extend(snapshot.alliance_offers.iter().copied());

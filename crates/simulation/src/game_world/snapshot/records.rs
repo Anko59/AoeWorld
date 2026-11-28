@@ -9,7 +9,7 @@ use aoe_core::{EntityId, Formation, PlayerId, TileRect, WorldPosition};
 use aoe_map::ResourceOverlaySnapshot;
 use serde::{Deserialize, Serialize};
 
-pub const WORLD_SNAPSHOT_VERSION: u16 = 37;
+pub const WORLD_SNAPSHOT_VERSION: u16 = 38;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WorldSnapshot {
@@ -20,6 +20,8 @@ pub struct WorldSnapshot {
     pub hp_quarters: Vec<u8>,
     pub players: Vec<PlayerEconomy>,
     pub(crate) stances: Vec<super::super::diplomacy::StanceRecord>,
+    pub(crate) diplomacy_history: super::super::diplomacy::History,
+    pub(crate) conquests: super::super::diplomacy::Conquests,
     pub(crate) alliance_offers: Vec<(PlayerId, PlayerId)>,
     /// Last damage tick for each unordered pair of seats that fought.
     pub(crate) last_hostile_ticks: Vec<((PlayerId, PlayerId), u64)>,
@@ -259,6 +261,8 @@ pub enum SnapshotError {
     Version,
     #[error("invalid herd recovery records")]
     Recovery,
+    #[error("invalid saved diplomacy records")]
+    Diplomacy,
     #[error("invalid saved entity identities")]
     EntityIds,
     #[error("the world already holds units or buildings")]

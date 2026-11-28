@@ -1,9 +1,13 @@
 #diplomacy-panel {
   color: #f7e8c3;
-  background: #201910 var(--ui-menu-image, none) center / cover;
+  background:
+    linear-gradient(180deg, #231a10f0, #19130df7),
+    #201910 var(--ui-menu-image, none) center / cover;
   border: 2px solid #a48149;
-  padding: 22px;
-  width: min(520px, 92vw);
+  box-sizing: border-box;
+  padding: clamp(12px, 2vw, 22px);
+  width: min(640px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
   box-shadow: 0 12px 48px #000b;
 }
 #diplomacy-panel::backdrop { background: #120e08aa; }
@@ -20,11 +24,33 @@
 }
 #diplomacy-panel button:not(:disabled) { cursor: pointer; }
 #diplomacy-panel button:disabled { opacity: .5; }
-#diplomacy-panel .diplomacy-table { margin: 14px 0; max-height: 48vh; overflow: auto; }
+#diplomacy-panel .diplomacy-table { margin: 14px 0; max-height: 31vh; overflow: auto; }
 #diplomacy-panel table { border-collapse: collapse; width: 100%; }
 #diplomacy-panel :is(td, th) { text-align: left; padding: 7px 6px; border-bottom: 1px solid #c39d594a; }
+#diplomacy-panel th[scope="row"] { overflow-wrap: anywhere; }
 #diplomacy-panel td small { display: block; padding-top: 4px; }
-#diplomacy-panel footer { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+#diplomacy-panel td select + button { margin: 4px 0 0 4px; }
+#diplomacy-panel :is(footer, form) { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+#diplomacy-panel :is(footer, form) label { display: flex; align-items: center; gap: 6px; }
+#diplomacy-panel [hidden] { display: none; }
+#diplomacy-request { margin: 12px 0 0; padding-top: 12px; border-top: 1px solid #c39d594a; }
+#diplomacy-recipient { max-width: min(26vw, 190px); }
+.diplomacy-history { border: 1px solid #896e45; background: #120e0a; padding: 8px 12px; }
+.diplomacy-history h3 { margin: 0 0 4px; color: #e5c888; font: 700 17px Georgia, serif; }
+#diplomacy-log { margin: 0; padding: 0; list-style: none; min-height: 2.6em; max-height: 22vh; overflow: auto; }
+#diplomacy-log li { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 4px 0; overflow-wrap: anywhere; }
+#diplomacy-notice {
+  position: absolute;
+  top: 74px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(85vw, 520px);
+  padding: 8px 14px;
+  color: #fff1d1;
+  background: #21190ff5;
+  border: 1px solid #a48149;
+  pointer-events: none;
+}
 #tribute-amount { width: 86px; }
 #tribute-resource-icon .icon { width: 25px; height: 25px; vertical-align: middle; }
 #tribute-fee { color: #e5c888; }

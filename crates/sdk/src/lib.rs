@@ -39,7 +39,8 @@ mod world;
 mod tests;
 
 pub use aoe_protocol::{
-    AllianceOffer, AlliedMarket, DiplomacySeat, DiplomacyView, DiplomaticStance,
+    AllianceOffer, AlliedMarket, DiplomacyEntry, DiplomacyMessage, DiplomacySeat, DiplomacyView,
+    DiplomaticStance,
 };
 pub use aoe_protocol::{CombatStance, GeneralState, GeneralStatus, SquadKind, SquadStatus};
 pub use aoe_protocol::{GroundRelic, MonasteryRelics, RelicAction, RelicVictory, RelicView};

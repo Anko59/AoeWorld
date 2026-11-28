@@ -28,3 +28,52 @@ async fn viewer_receives_a_name_and_only_their_own_allies_market_positions() {
             .is_empty()
     );
 }
+
+#[tokio::test]
+async fn ai_resubscription_replaces_a_withdrawn_offer_with_an_empty_view() {
+    let service = super::super::GameplayService::diplomacy_demo(Seed(7), false).unwrap();
+    let human = PlayerId(0);
+    let ai = PlayerId(1);
+    service
+        .world
+        .write()
+        .await
+        .offer_alliance(human, ai)
+        .unwrap();
+    let (sender, mut receiver) = tokio::sync::mpsc::channel(64);
+    let (session, _) = service
+        .join_slot(service.slots[1].token, sender)
+        .await
+        .unwrap();
+    let region = aoe_core::TileRect::from_xywh(0, 0, 256, 256);
+    service.subscribe(session, 1, region, true).await;
+    let mut diplomacy = None;
+    while let Ok(message) = receiver.try_recv() {
+        if let GameplayServerMessage::Diplomacy(view) = message {
+            diplomacy = Some(view);
+        }
+    }
+    assert_eq!(diplomacy.unwrap().seats[0].offer, AllianceOffer::Received);
+
+    service
+        .world
+        .write()
+        .await
+        .set_diplomatic_stance(human, ai, DiplomaticStance::Neutral)
+        .unwrap();
+    service.subscribe(session, 2, region, true).await;
+    while let Ok(message) = receiver.try_recv() {
+        if let GameplayServerMessage::Diplomacy(view) = message {
+            assert_eq!(
+                view,
+                DiplomacyView {
+                    revision: 2,
+                    viewer: ai,
+                    ..Default::default()
+                }
+            );
+            return;
+        }
+    }
+    panic!("AI retained the withdrawn alliance offer");
+}

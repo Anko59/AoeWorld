@@ -226,6 +226,8 @@ impl GameWorld {
             building.last_hit = Some(hit);
             let occupants: Vec<_> = building.garrison.iter().map(|g| g.unit.id).collect();
             let (building_kind, footprint) = (building.kind, building.footprint);
+            let completed_center =
+                building_kind == crate::BuildingKind::TownCenter && building.is_complete();
             let (player, killed) = (building.player, building.hp == 0);
             self.record_combat_hit(
                 Some(attacker_player),
@@ -242,6 +244,9 @@ impl GameWorld {
                     changed.extend(self.query(rect).0.into_iter().map(|u| u.id));
                 }
                 self.destroy_building(target);
+                if completed_center {
+                    self.town_center_conquered(player, attacker_player);
+                }
                 self.finish_target_attack(attacker_id, target, changed);
             }
         }

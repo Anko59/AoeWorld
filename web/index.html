@@ -41,8 +41,19 @@
         <label>Amount <input id="tribute-amount" type="number" min="1" max="4294967295" step="1" value="100" required></label>
         <span id="tribute-fee"></span>
       </footer>
+      <form id="diplomacy-request">
+        <label>To <select id="diplomacy-recipient"></select></label>
+        <label>Request <select id="diplomacy-kind"></select></label>
+        <label id="diplomacy-target-label" hidden>Target <select id="diplomacy-target"></select></label>
+        <button type="submit">Send request</button>
+      </form>
       <p id="diplomacy-result" role="status"></p>
+      <section class="diplomacy-history" aria-labelledby="diplomacy-log-title">
+        <h3 id="diplomacy-log-title">Message log</h3>
+        <ol id="diplomacy-log" aria-labelledby="diplomacy-log-title" aria-live="polite"></ol>
+      </section>
     </dialog>
+    <div id="diplomacy-notice" role="status" hidden></div>
     <div id="game-notice" role="status"><span id="connection">Loading…</span></div><div id="relic-victory" role="status" hidden></div>
     <div id="game-error" role="alert" hidden><span id="game-error-message"></span> <a id="reload-game" href="/">Reload game</a></div>
     <section id="bottom-panel" aria-label="Village command panel">
