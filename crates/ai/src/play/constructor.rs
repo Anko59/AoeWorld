@@ -78,6 +78,16 @@ pub fn place(
                 .bad_sites
                 .contains(&(format!("{kind:?}"), found.0, found.1))
         {
+            // The server refuses a site no villager can walk to, after a
+            // reach test costing ~2M instructions; ask the land view first.
+            // Unanswered (land budget spent), the server judges as before.
+            if kind != BuildingKind::Dock && reachable(ctx, kind, found, builders[0]) == Some(false)
+            {
+                ctx.board
+                    .bad_sites
+                    .insert((format!("{kind:?}"), found.0, found.1));
+                continue;
+            }
             site = Some(found);
             break;
         }
@@ -104,6 +114,35 @@ pub fn place(
     }
     ctx.board.bump("build_orders");
     Ok(true)
+}
+
+/// Whether `builder` has a known land route to a tile beside the footprint;
+/// `None` while the land view has not answered.
+fn reachable(ctx: &mut Context<'_>, kind: BuildingKind, site: Tile, builder: u32) -> Option<bool> {
+    let from = ctx.villagers.iter().find(|v| v.id == builder)?.tile();
+    let (x, y) = site;
+    let mut edges = [
+        (x - 1, y),
+        (x + kind.side(), y),
+        (x, y - 1),
+        (x, y + kind.depth()),
+    ];
+    edges.sort_by_key(|&(ex, ey)| (ex - from.0).pow(2) + (ey - from.1).pow(2));
+    let mut known = false;
+    for edge in edges {
+        // Ground the land view has not seen is left to the server to judge.
+        if !(ctx.world.land_known(from) && ctx.world.land_known(edge)) {
+            continue;
+        }
+        known = true;
+        if ctx.land_route(from, edge).is_some() {
+            return Some(true);
+        }
+        if ctx.land_unanswered(from, edge) {
+            return None;
+        }
+    }
+    Some(!known)
 }
 
 /// The villager closest to `tile` that is not already building.
