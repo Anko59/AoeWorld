@@ -320,3 +320,22 @@ fn test_a_refused_approach_tile_is_not_sent_again() {
     assert_eq!(second[0].0, groups[0].0);
     assert_ne!(second[0].1, groups[0].1);
 }
+
+#[test]
+fn test_an_army_left_on_the_same_tile_is_not_sent_the_same_hop_again() {
+    let far = hidden(house(900, (250, 250)));
+    let mut world = assault(muster(), vec![far]);
+    let mut brain = Brain::new(Config::default());
+    let first = army_dests(&play(&world, &mut brain, &[]));
+    assert_eq!(first.len(), 14);
+    // Past the march pause, still idle where the hop left them: the server
+    // accepted it and they did not move, so the same order would do nothing.
+    world.tick = 100 + brain.config.march_pause_seconds * 20 + 20;
+    assert!(army_dests(&play(&world, &mut brain, &[])).is_empty());
+    // Once they have moved, the next hop is ordered.
+    for unit in world.units.iter_mut().filter(|u| u.id >= 300) {
+        unit.x += 8;
+    }
+    world.tick += brain.config.march_pause_seconds * 20 + 20;
+    assert!(!army_dests(&play(&world, &mut brain, &[])).is_empty());
+}

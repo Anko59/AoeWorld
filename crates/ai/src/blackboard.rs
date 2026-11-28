@@ -71,6 +71,8 @@ pub struct Blackboard {
     pub marched: BTreeMap<u32, u64>,
     /// soldier id -> (last progress tile, tick)
     pub march_progress: BTreeMap<u32, (Tile, u64)>,
+    /// soldier id -> (its tile, the hop) of its last march order
+    pub march_sent: BTreeMap<u32, (Tile, Tile)>,
     /// villager id -> (resource node, tick) of its last gather order
     pub gather_sent: BTreeMap<u32, (u64, u64)>,
     /// scout id -> tick of its last move order
@@ -168,6 +170,7 @@ impl Default for Blackboard {
             march_since: 0,
             marched: BTreeMap::new(),
             march_progress: BTreeMap::new(),
+            march_sent: BTreeMap::new(),
             gather_sent: BTreeMap::new(),
             scout_sent: BTreeMap::new(),
             scout_targets: BTreeMap::new(),
