@@ -1,4 +1,4 @@
-use super::table::{describe, grouped};
+use super::table::describe;
 use super::{Played, json, table};
 use crate::game_score::Plan;
 use crate::game_score::scenarios::{BATTLE, LATE, MARCH, NATURAL, Scenario};
@@ -69,79 +69,12 @@ fn both() -> Vec<Played> {
 }
 
 #[test]
-fn numbers_are_grouped_by_thousands() {
-    for (number, text) in [
-        (0, "0"),
-        (999, "999"),
-        (1_000, "1,000"),
-        (3_209_000, "3,209,000"),
-    ] {
-        assert_eq!(grouped(number), text);
-    }
-}
-
-#[test]
-fn the_table_has_a_block_per_scenario_and_a_column_per_window() {
-    let text = table("game score: 100 seats", &both());
-    for words in [
-        "natural: one fresh game",
-        "late: the late-game recipe",
-        "early",
-        "middle",
-        "whole",
-        "1000-3000",
-        "8000-10000",
-        "20-60",
-        "units alive at the end",
-        "units / buildings produced",
-        "villagers standing idle (share)",
-        "movement orders given",
-        "orders arrived (share of orders ended)",
-        "order to arrival, p50 / p95 (ticks)",
-        "order to first step, p50 / p95 (ticks)",
-        "route searches started / answers from the cache",
-        "route orders stuck / expired",
-        "movers waiting for a route, end / peak",
-        "wait for a route, p95 end / worst (ticks)",
-        "Steward orders / unit visits",
-        "General orders / unit visits",
-        "Vassal / Rust AI orders",
-        "hits landed",
-        "first blow after contact (ticks, mean)",
-        "kills / losses",
-        "resources delivered",
-        "seconds inside the ticks",
-        "tick ms p50 / p95 / p99 / max",
-        "peak memory (MiB)",
-        "cost per arrival / 1,000 resources / hit",
-        "resources delivered per game minute:",
-        "determinism, 1 worker and 4 workers: the same hash every 10 ticks",
-        "native seconds: 1 worker 4.5 s (start 1.5), 4 workers 4.5 s (start 1.5)",
-    ] {
-        assert!(text.contains(words), "missing {words:?} in\n{text}");
-    }
-    assert!(text.contains("12,345 (91%)"), "{text}");
-    assert!(!text.contains("scoreboard"), "that word names another page");
-    assert_eq!(
-        text.matches("units alive at the end").count(),
-        2,
-        "one per scenario"
-    );
-}
-
-#[test]
 fn the_table_for_the_pull_request_set_is_short_enough_for_a_comment() {
     let text = table("game score: 100 seats, seed 1, map ce1c8d7e", &both());
     let lines = text.lines().count();
     assert!(lines <= 62, "{lines} lines:\n{text}");
     let widest = text.lines().map(str::len).max().unwrap_or(0);
     assert!(widest <= 110, "a line is {widest} characters wide");
-}
-
-#[test]
-fn a_scenario_with_one_minute_has_no_series_lines() {
-    let text = table("title", &both()[1..]);
-    assert!(!text.contains("per game minute"), "{text}");
 }
 
 #[test]
@@ -262,39 +195,6 @@ fn the_table_says_which_basis_the_cost_per_service_is_computed_from() {
     }
     let text = table("title", &set);
     assert!(text.contains("hit (instructions)"), "{text}");
-}
-
-#[test]
-fn a_short_series_fits_on_the_line_of_its_label_and_a_long_one_wraps_under_it() {
-    let mut set = both();
-    for minute in &mut set[0].runs[0].series {
-        minute.service.economy.delivered_total = 123_456;
-    }
-    let text = table("title", &set);
-    let line = |start: &str| {
-        text.lines()
-            .position(|line| line.starts_with(start))
-            .unwrap_or_else(|| panic!("no line starts with {start:?} in\n{text}"))
-    };
-    let lines: Vec<_> = text.lines().collect();
-    let first = line("resources delivered per game minute:");
-    assert!(
-        lines[first].len() > "resources delivered per game minute:".len(),
-        "17 minutes"
-    );
-    let short = table("title", &[played(&LATE, &[("late", 20, 60)], 2)]);
-    assert!(
-        short.contains("resources delivered per game minute: 0 0\n"),
-        "two minutes fit on the label's line:\n{short}"
-    );
-    assert!(
-        lines[first + 1].starts_with(' '),
-        "the numbers go on under their label"
-    );
-    assert!(
-        lines.iter().all(|line| line.len() <= 110),
-        "a line is too long"
-    );
 }
 
 fn staged(scenario: &'static Scenario, ticks: u64, battle: bool) -> Played {

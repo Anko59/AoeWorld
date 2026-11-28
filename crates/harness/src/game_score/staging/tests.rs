@@ -223,11 +223,38 @@ fn an_army_is_staged_on_the_open_ground_of_one_bank_and_ordered_across() {
         behind_the_line,
         "the army starts on the near bank, clear of the neck"
     );
-    let again = {
-        let mut other = bridge_world();
-        stage(&mut other, &staging, 1).expect("again")
+    let layout = |world: &GameWorld| {
+        world
+            .units()
+            .map(|unit| (unit.id, unit.position.x, unit.position.y))
+            .collect::<Vec<_>>()
     };
+    let staged_at = |seed| {
+        let mut world = bridge_world();
+        let summary = stage(&mut world, &staging, seed).expect("staged again");
+        (layout(&world), summary)
+    };
+    let (same, again) = staged_at(1);
     assert_eq!(staged, again, "the same seed stages the same orders");
+    let first = layout(&world);
+    assert_eq!(first, same, "the same seed places the same units");
+
+    let (other, _) = staged_at(2);
+    assert_ne!(
+        first, other,
+        "a different seed assigns the tiles differently"
+    );
+    let tiles = |units: Vec<_>| {
+        units
+            .into_iter()
+            .map(|(_, x, y)| (x, y))
+            .collect::<BTreeSet<_>>()
+    };
+    assert_eq!(
+        tiles(first),
+        tiles(other),
+        "both seeds occupy the same tiles"
+    );
 }
 
 #[test]
@@ -319,37 +346,4 @@ fn a_staging_on_a_map_without_the_choke_is_refused() {
     let error = stage(&mut world, &staging, 1).expect_err("no such neck here");
     assert!(error.contains("the first bridge"), "{error}");
     assert_eq!(world.unit_count(), 0, "nothing was placed");
-}
-
-#[test]
-fn another_seed_stages_the_same_army_in_another_layout() {
-    let staged_at = |seed| {
-        let mut world = bridge_world();
-        let choke: &'static Choke = Box::leak(Box::new(bridge_choke(&world)));
-        let staging = Staging {
-            map: "test",
-            choke,
-            armies: MILITIA,
-            attack: false,
-        };
-        stage(&mut world, &staging, seed).expect("staged");
-        world
-            .units()
-            .map(|unit| (unit.id.0, unit.position.x, unit.position.y))
-            .collect::<Vec<_>>()
-    };
-    let (one, same, other) = (staged_at(1), staged_at(1), staged_at(2));
-    assert_eq!(one, same, "a seed is a layout");
-    assert_ne!(
-        one, other,
-        "another seed is another layout, though every unit is a Militia"
-    );
-    let places = |layout: &[(u32, i32, i32)]| -> BTreeSet<(i32, i32)> {
-        layout.iter().map(|&(_, x, y)| (x, y)).collect()
-    };
-    assert_eq!(
-        places(&one),
-        places(&other),
-        "the same places, dealt to the units in another order"
-    );
 }

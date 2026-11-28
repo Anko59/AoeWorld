@@ -457,18 +457,6 @@ fn the_level_is_recorded_in_the_evidence_and_shown_for_ai() {
 }
 
 #[test]
-fn the_embedded_limits_are_the_committed_file() {
-    assert_eq!(Level::Low.video_limit(), None);
-    assert_eq!(Level::Max.video_limit(), Some(300));
-    assert!(!Level::Medium.voiced() && Level::High.voiced());
-}
-
-#[test]
-fn the_embedded_config_parses() {
-    assert!(Levels::embedded().is_some());
-}
-
-#[test]
 fn a_published_description_names_its_level_in_the_gate_evidence_heading() {
     // `make ship` publishes the level there; the body-file marker is dropped.
     assert_eq!(

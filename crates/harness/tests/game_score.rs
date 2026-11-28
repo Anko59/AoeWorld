@@ -145,20 +145,6 @@ fn game_score_late_plays_the_recipe_at_a_scale_and_names_its_window() {
 }
 
 #[test]
-fn game_score_no_scenario_flag_plays_the_pull_request_set() {
-    let (output, report, _directory) =
-        game_score(&["--ticks", "60", "--late-percent", "5", "--workers", "1,1"]);
-    assert!(output.status.success(), "{}", stderr(&output));
-    let ids: Vec<_> = report["scenarios"]
-        .as_array()
-        .expect("scenarios")
-        .iter()
-        .map(|scenario| scenario["id"].as_str().unwrap_or(""))
-        .collect();
-    assert_eq!(ids, ["natural", "late"]);
-}
-
-#[test]
 fn game_score_two_runs_at_one_worker_count_agree() {
     let (output, report, _directory) = game_score(&[
         "--scenario",

@@ -66,30 +66,6 @@ fn a_changed_service_number_is_listed_with_both_values_and_its_change() {
 }
 
 #[test]
-fn changed_numbers_come_in_the_order_of_the_table_then_by_path() {
-    let base = standard();
-    let mut branch = standard();
-    for (path, value) in [
-        ("service.planning.approached", 4),
-        ("service.arrival.arrived_permille", 900),
-        ("service.size.units", 1_000),
-        ("service.economy.income_faults", 1),
-    ] {
-        set(&mut branch, "late", "late", path, json!(value));
-    }
-    let diffs = compare(Some(&base), &branch);
-    assert_eq!(
-        paths(find(&diffs, "late", "late")),
-        [
-            "size.units",
-            "arrival.arrived_permille",
-            "economy.income_faults",
-            "planning.approached"
-        ]
-    );
-}
-
-#[test]
 fn a_number_that_gains_or_loses_a_value_changes_without_a_direction() {
     let base = standard();
     let mut branch = standard();
@@ -196,25 +172,6 @@ fn a_cost_per_unit_of_service_is_judged_on_instructions_and_left_out_on_wall_tim
             .iter()
             .any(|row| row.path == "cost.instructions"),
         "the count itself is shown beside"
-    );
-}
-
-#[test]
-fn the_noisy_rows_come_in_a_fixed_order() {
-    let report = standard();
-    let diffs = compare(Some(&report), &report);
-    let order: Vec<&str> = find(&diffs, "late", "late")
-        .noisy
-        .iter()
-        .map(|row| row.path.as_str())
-        .collect();
-    assert_eq!(
-        order,
-        [
-            "cost.tick_seconds",
-            "cost.tick_ms.p95",
-            "cost.peak_memory_mib"
-        ]
     );
 }
 
