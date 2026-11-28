@@ -185,24 +185,47 @@ impl GameWorld {
         form: Formation,
         ids: &[EntityId],
     ) -> Result<WorldPosition, EconomyError> {
+        self.formation_goal_from(player, origin, destination, form, ids, None)
+    }
+
+    /// `formation_goal` when the caller already asked the regions: `known`
+    /// is `Some(frontier)` for a destination proven unreachable, so neither
+    /// the reachability query nor the frontier walk runs twice (#978: an
+    /// attack move to unreachable ground walked the frontier in
+    /// `formation_leg` and again here, 36.6M of the scoreboard's 113M of
+    /// orders a tick).
+    pub(crate) fn formation_goal_from(
+        &self,
+        player: PlayerId,
+        origin: WorldPosition,
+        destination: WorldPosition,
+        form: Formation,
+        ids: &[EntityId],
+        known: Option<Option<aoe_core::TileCoord>>,
+    ) -> Result<WorldPosition, EconomyError> {
         let bucket = self.formation_bucket(ids);
-        if !self.has_route_navigation()
-            || self.land_reachable(
-                player,
-                bucket,
-                origin.tile_floor(),
-                destination.tile_floor(),
-            )?
-        {
-            return Ok(destination);
-        }
-        let Some(tile) = self.land_frontier(
-            player,
-            bucket,
-            origin.tile_floor(),
-            destination.tile_floor(),
-        )?
-        else {
+        let frontier = match known {
+            Some(frontier) => frontier,
+            None => {
+                if !self.has_route_navigation()
+                    || self.land_reachable(
+                        player,
+                        bucket,
+                        origin.tile_floor(),
+                        destination.tile_floor(),
+                    )?
+                {
+                    return Ok(destination);
+                }
+                self.land_frontier(
+                    player,
+                    bucket,
+                    origin.tile_floor(),
+                    destination.tile_floor(),
+                )?
+            }
+        };
+        let Some(tile) = frontier else {
             return Ok(destination);
         };
         let frontier = WorldPosition::from_tile_center(tile).unwrap_or(destination);
