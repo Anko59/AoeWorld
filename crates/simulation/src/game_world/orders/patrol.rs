@@ -44,7 +44,24 @@ impl GameWorld {
         at: WorldPosition,
     ) -> bool {
         let patrol = self.combat.patrols.remove(&id);
-        let moving = self.issue_attack_move(id, at).is_ok_and(|moving| moving);
+        let moving = if self.economy.generals.armies.contains_key(&id)
+            && let Some(unit) = self.unit(id)
+            && self
+                .direct_blocker(unit.player, unit.position, at)
+                .is_some()
+        {
+            self.issue_formation_move(
+                unit.player,
+                &[id],
+                aoe_core::Formation::Line,
+                at,
+                false,
+                true,
+            )
+            .is_ok()
+        } else {
+            self.issue_attack_move(id, at).is_ok_and(|moving| moving)
+        };
         if moving && let Some(pair) = patrol {
             self.combat.patrols.insert(id, pair);
         }

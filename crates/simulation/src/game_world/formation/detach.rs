@@ -255,7 +255,7 @@ impl GameWorld {
         let fast_left = self.fast_route_allowance() > 0;
         let previous = self.take_planner(index);
         let Ok((waypoint, route, planner, planning, fast_tried)) =
-            self.order_route(index, origin, goal)
+            self.order_route(index, origin, goal, false)
         else {
             self.store_planner(index, previous);
             return;

@@ -102,10 +102,17 @@ fn a_stand_ground_unit_ignores_a_wall_while_it_can_see_an_enemy_past_its_range()
 }
 
 #[test]
-fn attack_move_does_not_leave_the_march_for_a_wall_ahead_of_a_house() {
+fn attack_move_does_not_leave_the_march_for_an_off_route_wall_ahead_of_a_house() {
     let mut w = world();
     let soldier = w.spawn_militia(OWN, at(100, 100)).unwrap();
-    let wall = obstacle(&mut w, BuildingKind::StoneWall);
+    let wall = w
+        .insert_building(
+            ENEMY,
+            BuildingKind::StoneWall,
+            TileRect::from_xywh(102, 101, 1, 1),
+            true,
+        )
+        .unwrap();
     let house = w
         .insert_building(
             ENEMY,

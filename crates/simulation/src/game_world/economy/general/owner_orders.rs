@@ -41,12 +41,35 @@ impl GameWorld {
         id: EntityId,
         destination: WorldPosition,
         attack_move: bool,
-    ) -> Result<(), GameWorldError> {
+    ) -> Result<(), EconomyError> {
         let prior = &self.economy.generals.armies[&id];
         let changed =
             prior.destination != Some(destination) || prior.owner_march != Some(attack_move);
         if changed {
-            self.issue_move(id, destination)?;
+            if attack_move {
+                let &index = self.lookup.get(&id).ok_or(GameWorldError::UnknownEntity)?;
+                let commander = self.units[index].state;
+                // Admission uses the stance the commander will have on this
+                // march. A refused order leaves the current withdrawal active.
+                if let Some(saved) = prior.stances.iter().flatten().find(|saved| saved.id == id) {
+                    self.units[index].state.stance = saved.original;
+                }
+                let issued = self.issue_formation_move(
+                    commander.player,
+                    &[id],
+                    aoe_core::Formation::Line,
+                    destination,
+                    false,
+                    true,
+                );
+                if issued.is_err() {
+                    self.units[index].state.stance = commander.stance;
+                }
+                issued?;
+                self.cancel_transport_journey(id);
+            } else {
+                self.issue_move(id, destination)?;
+            }
             self.move_queues.remove(&id);
             self.restore_general_stances(id);
             let army = self

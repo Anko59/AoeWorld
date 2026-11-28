@@ -126,7 +126,7 @@ impl GameWorld {
         let index = self.lookup[&leader];
         let previous = self.take_planner(index);
         self.route_metrics.attribution.group_orders += 1;
-        let planned = self.order_route(index, origin, destination);
+        let planned = self.order_route(index, origin, destination, breach.is_some());
         let (waypoint, route, planner, planning, fast_tried) = match planned {
             Ok(plan) => plan,
             Err(error) => {
@@ -372,7 +372,7 @@ impl GameWorld {
                 continue;
             };
             if let Ok((waypoint, route, planner, planning, fast_tried)) =
-                self.order_route(index, group.anchor, destination)
+                self.order_route(index, group.anchor, destination, breach.is_some())
             {
                 self.route_metrics.attribution.group_stopped_short +=
                     u64::from(destination != requested_destination);

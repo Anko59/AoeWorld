@@ -177,6 +177,47 @@ fn wounded_withdrawal_restores_on_healing_and_on_fight_end_without_a_destination
 }
 
 #[test]
+fn wounded_general_can_replace_withdrawal_with_a_wall_breach() {
+    let (mut w, g, _) = army();
+    w.set_fog_disabled(true);
+    w.units[w.lookup[&g]].state.hp = 1;
+    w.insert_building(
+        PlayerId(1),
+        BuildingKind::House,
+        TileRect::from_xywh(109, 100, 2, 2),
+        true,
+    )
+    .unwrap();
+    let wall = w
+        .insert_building(
+            PlayerId(1),
+            BuildingKind::PalisadeWall,
+            TileRect::from_xywh(108, 104, 1, 1),
+            true,
+        )
+        .unwrap();
+    let original = w.unit(g).unwrap().stance;
+    for _ in 0..3 {
+        decide(&mut w);
+    }
+    assert_eq!(w.general_status(g).unwrap().state, GeneralState::Fighting);
+    assert_eq!(w.unit(g).unwrap().stance, CombatStance::NoAttack);
+
+    w.issue_player_formation_move(
+        PlayerId(0),
+        &[g],
+        aoe_core::Formation::Line,
+        at(108, 104),
+        false,
+        true,
+    )
+    .unwrap();
+    assert_eq!(w.unit(g).unwrap().stance, original);
+    advance(&mut w, 1_200);
+    assert!(w.building(wall).is_none());
+}
+
+#[test]
 fn release_and_general_removal_restore_stances_without_another_adopter() {
     for remove_leader in [false, true] {
         let (mut w, g, members) = army();

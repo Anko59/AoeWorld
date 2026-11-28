@@ -206,7 +206,13 @@ impl GameWorld {
                 // A grouped soldier leaves wall work to its group's breach: its
                 // own look would pull it out of the formation and lose the
                 // order the wall stands in the way of.
-                None if self.in_breaching_group(id) => BuildingTargets::Ordinary,
+                None if self.in_breaching_group(id)
+                    || (!u.kind.is_naval()
+                        && u.kind != UnitKind::Villager
+                        && self.combat.resuming.contains_key(&id)) =>
+                {
+                    BuildingTargets::Ordinary
+                }
                 None if marching
                     && u.stance != CombatStance::StandGround
                     && (self.tick.0 + u64::from(id.0)).is_multiple_of(self.config.ticks(4)) =>
@@ -320,14 +326,20 @@ impl GameWorld {
         })
     }
 
-    /// One bounded look for an enemy, as an idle unit would make.
-    pub(crate) fn probe_for_target(&mut self, id: EntityId) -> Option<EntityId> {
+    /// A soldier about to resume a march leaves obstacle selection to the
+    /// march itself, so it can walk through the gap it just opened.
+    pub(crate) fn probe_for_resume_target(&mut self, id: EntityId) -> Option<EntityId> {
         let u = self.unit(id)?;
         if u.stance == CombatStance::NoAttack || u.auto_scout {
             return None;
         }
         let area = self.acquisition_area(&u)?;
-        self.acquire_target(&area, BuildingTargets::Unit).target
+        let buildings = if u.kind.is_naval() || u.kind == crate::UnitKind::Villager {
+            BuildingTargets::Unit
+        } else {
+            BuildingTargets::Ordinary
+        };
+        self.acquire_target(&area, buildings).target
     }
 
     pub(crate) fn begin_autonomous_attack(

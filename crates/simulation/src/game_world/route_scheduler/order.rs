@@ -14,6 +14,9 @@ use std::collections::VecDeque;
 
 /// Longest straight trip, in tiles, that is walked without a route search.
 const DIRECT_TRIP_TILES: i32 = 8;
+/// Bound the static proof for a formation's march to a breach. This covers
+/// the AI's ordinary attack hops without walking an entire long route here.
+const DIRECT_BREACH_TILES: i32 = 64;
 /// How long (ticks, 10 s at 20 Hz) an unreachable verdict is remembered.
 const UNREACHABLE_MEMO_TICKS: u64 = 200;
 
@@ -173,7 +176,7 @@ impl GameWorld {
         // while the new route is planned, and it comes back if that fails.
         let previous = self.take_planner(index);
         self.routing_contact = matches!(precision, GoalPrecision::Contact);
-        let routed = self.order_route(index, origin, destination);
+        let routed = self.order_route(index, origin, destination, false);
         self.routing_contact = false;
         let (waypoint, route, planner, planning, fast_tried) = match routed {
             Ok(route) => route,
@@ -289,6 +292,7 @@ impl GameWorld {
         index: usize,
         origin: WorldPosition,
         destination: WorldPosition,
+        breach_approach: bool,
     ) -> Result<OrderRoute, GameWorldError> {
         self.order_diagnostics.demand[self.order_diagnostics.issuer as usize].route_requests += 1;
         let caller = Some(std::panic::Location::caller());
@@ -297,6 +301,13 @@ impl GameWorld {
         self.units[index].route_renewals = 0;
         let (kind, player) = (self.units[index].state.kind, self.units[index].state.player);
         let target_tile = destination.tile_floor();
+        if breach_approach
+            && self
+                .straight_walk_clear(kind, origin, destination, DIRECT_BREACH_TILES)
+                .0
+        {
+            return Ok((destination, VecDeque::new(), None, false, false));
+        }
         Ok(
             match self.next_map_route(origin.tile_floor(), target_tile, kind, player) {
                 Some(MapRoutePlan::Outcome(MovementOutcome::Path(path))) => {
@@ -312,7 +323,7 @@ impl GameWorld {
                     // (#1040) is retried once from the tile the body overlaps.
                     let start = self.route_origin(kind, origin);
                     if start != origin {
-                        return self.order_route(index, start, destination);
+                        return self.order_route(index, start, destination, breach_approach);
                     }
                     return Err(GameWorldError::InvalidPosition);
                 }
