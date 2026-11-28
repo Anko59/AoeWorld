@@ -92,6 +92,9 @@ recheck in play. The hierarchy build order stays provinces first.
 - #1114 closed the unreachable-work and occupied-foundation items. Attack-move through enemy buildings remains open.
 - #1151 increased gold per pile and doubled Outpost sight. #1160 landed resource regrowth and recovery.
   #1161 landed relics. #1165 measured the France pacing baseline for the open balance work.
+- #1166 (diplomacy slice 1) is in flight: stances, tribute, city-named AIs and the diplomacy panel.
+- #1154 fixed the browser WASM test runner's starved HTTP worker, #1159 cut the gameplay WASM by 12.7 KB without
+  visual change, and #1163 made the second-page terrain test wait for a painted view.
 - #1135 and #1142 added local ship comparisons and staged ford scenarios to the game score.
 - #1025 landed the far-view training workflow, Shift button placement, wide management controls and DE roads.
   #974, #957, #1020, #969 and #961 also have merged UI rows. Styling and reports awaiting play verification
