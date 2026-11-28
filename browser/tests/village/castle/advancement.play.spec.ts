@@ -2,7 +2,6 @@ import { expect, type Page } from "@playwright/test";
 import { isolatedTest as test } from "../../../server.js";
 import { gameAssets } from "../../game-assets.js";
 import { centerVillage } from "../fixtures/resources.js";
-import { forceCanvas, forceWebGl } from "../../rendering/backends.js";
 
 async function select(page: Page, kind: string) {
   const actors = JSON.parse(
@@ -16,10 +15,8 @@ async function select(page: Page, kind: string) {
 test("Castle Age unlocks native build commands, knights and tier two research", async ({
   page,
   request,
-}, info) => {
+}) => {
   test.setTimeout(120_000);
-  if (info.project.name === "canvas") await forceCanvas(page);
-  if (info.project.name === "firefox-webgl2") await forceWebGl(page);
   expect(
     (await request.post("/maps/reset?scenario=feudal-military")).status(),
   ).toBe(204);

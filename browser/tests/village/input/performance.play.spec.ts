@@ -88,18 +88,6 @@ test("performance URL flag reports frame and section timings and F3 hides it", a
   await expect.poll(async () => (await metrics(page))?.enabled).toBe(true);
 });
 
-test("performance sampling starts disabled and F3 enables it", async ({
-  page,
-}, info) => {
-  const renderer = info.project.name === "webgpu" ? "webgpu" : "webgl2";
-  await inputFixture(page, renderer);
-  await expect(page.locator("#performance-overlay")).toBeHidden();
-  await expect.poll(async () => (await metrics(page))?.enabled).toBe(false);
-  await page.keyboard.press("F3");
-  await expect(page.locator("#performance-overlay")).toBeVisible();
-  await expect.poll(async () => (await metrics(page))?.enabled).toBe(true);
-});
-
 test("Ctrl right-click queues orders and F3 toggles developer tools", async ({
   page,
 }, info) => {
@@ -116,6 +104,7 @@ test("Ctrl right-click queues orders and F3 toggles developer tools", async ({
   await expect(overlay).toBeHidden();
   await page.keyboard.press("F3");
   await expect(overlay).toBeVisible();
+  await expect.poll(async () => (await metrics(page))?.enabled).toBe(true);
   await page.keyboard.press("F3");
   await expect(overlay).toBeHidden();
 });

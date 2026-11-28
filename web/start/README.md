@@ -73,8 +73,7 @@ is from Google Fonts, under `FONT-LICENSE.txt`; screens need no external font
 request. Reduced-motion preferences disable pans, fades and bar animation.
 
 Browser specs in `browser/tests/start/` cover entry, requests, progress,
-errors, reload resume, capture hooks and both requested desktop sizes. Their screenshots
-are written to `.cache/start-shots/`.
+errors, reload resume and capture hooks.
 
 The opt-in `skirmish-startup-*` phase of `make ui-proof` measures a real-art
 France start with 99 opponents, at 960 km and 240:1 compression. Point
