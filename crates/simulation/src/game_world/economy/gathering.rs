@@ -48,13 +48,19 @@ impl GameWorld {
             return Err(EconomyError::InvalidResource);
         }
         let player = self.unit(id).ok_or(EconomyError::UnknownEntity)?.player;
-        if !self.animal_has_work_slot(a.id, a.kind, id)
-            || !self.walking_resource_reachable(id, a.position.tile_floor())
-            || !self.resource_has_work_spot(id, a.position.tile_floor())
-        {
+        let full = !self.animal_has_work_slot(a.id, a.kind, id);
+        let unreachable = !full && !self.walking_resource_reachable(id, a.position.tile_floor());
+        if full || unreachable || !self.resource_has_work_spot(id, a.position.tile_floor()) {
+            // A full carcass frees a slot in time; one this hunter cannot
+            // walk to never will, so the hunt ends instead of being retried.
+            let none = if unreachable {
+                GameWorldError::Unreachable.into()
+            } else {
+                EconomyError::InvalidResource
+            };
             a = self
                 .next_food_animal(player, a.position.tile_floor(), a.kind, a.id, id)
-                .ok_or(EconomyError::InvalidResource)?;
+                .ok_or(none)?;
             if a.hp > 0 || a.task != crate::AnimalTask::Carcass {
                 self.issue_hunt(player, &[id], a.id)?;
                 return Ok(());

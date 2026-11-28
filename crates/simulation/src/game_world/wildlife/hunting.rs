@@ -1,5 +1,5 @@
 use super::{AnimalKind, AnimalTask, HuntJob, HuntStage, distance, radius};
-use crate::{EconomyError, GameWorld, UnitKind, UnitTask, unit_combat};
+use crate::{EconomyError, GameWorld, GameWorldError, UnitKind, UnitTask, unit_combat};
 use aoe_core::{EntityId, PlayerId};
 
 #[cfg(test)]
@@ -147,7 +147,11 @@ impl GameWorld {
             if self.tick.0 < job.queue_retry_tick {
                 return true;
             }
-            let waiting = self.begin_carcass_gather(id, job.animal).is_err();
+            let waiting = match self.begin_carcass_gather(id, job.animal) {
+                Ok(()) => false,
+                Err(EconomyError::Movement(GameWorldError::Unreachable)) => return false,
+                Err(_) => true,
+            };
             if waiting {
                 job.queue_retry_tick = self.tick.0.saturating_add(u64::from(self.config.tick_hz));
             }
