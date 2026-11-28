@@ -280,3 +280,42 @@ fn a_known_unreachable_side_is_crossed_without_scanning_its_tiles() {
         "the far side's tiles were scanned: {cells}"
     );
 }
+
+#[test]
+fn a_second_frontier_from_the_same_start_reuses_its_learned_reach() {
+    // Walled into a corner box: the first walk learns the box's whole reach.
+    let mut grid = Grid::new(640, 640);
+    for i in 0..=64 {
+        grid.set(TileCoord::new(64, i), RegionTile::Blocked);
+        grid.set(TileCoord::new(i, 64), RegionTile::Blocked);
+    }
+    let mut regions = Regions::new(640, 640, LandBucket::Small);
+    let from = TileCoord::new(10, 10);
+    let corner = Some(TileCoord::new(63, 63));
+    assert_eq!(
+        regions.frontier(&grid, 0, from, TileCoord::new(630, 630)),
+        corner
+    );
+    let searched = regions.stats().searched;
+    // Another order toward the far side, from the same box: no new search.
+    let again = regions.frontier(&grid, 0, TileCoord::new(12, 11), TileCoord::new(600, 630));
+    assert_eq!(again, corner);
+    assert_eq!(
+        regions.stats().searched,
+        searched,
+        "the box was searched again"
+    );
+    // Another player's reach is its own.
+    assert_eq!(
+        regions.frontier(&grid, 1, from, TileCoord::new(630, 630)),
+        corner
+    );
+    assert!(regions.stats().searched > searched);
+    // A ground edit forgets every learned reach: the opened wall is seen.
+    grid.set(TileCoord::new(64, 30), RegionTile::Open);
+    regions.invalidate(TileCoord::new(64, 30), TileCoord::new(65, 31));
+    assert_eq!(
+        regions.frontier(&grid, 0, from, TileCoord::new(630, 630)),
+        Some(TileCoord::new(630, 630))
+    );
+}
