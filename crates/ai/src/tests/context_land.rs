@@ -209,3 +209,28 @@ fn a_refused_build_site_is_never_offered_again_so_the_next_nearest_is() {
     });
     assert_eq!(barracks, Some((83, 53)), "a refusal is per building kind");
 }
+
+#[test]
+fn a_build_site_no_builder_can_walk_to_is_skipped_for_the_next() {
+    let mut world = world();
+    world.economy = Some(economy());
+    // Every tile beside the nearest House site (83, 53) is walled off.
+    world.route_fn = Some(Box::new(|from, to| {
+        (to.0 > 85).then(|| FakeWorld::straight(from, to))
+    }));
+    let mut board = Blackboard::default();
+    let (placed, seat) = with_context(&world, &[], &mut board, &Config::default(), |ctx| {
+        let builder = ctx.villagers[0].id;
+        crate::play::constructor::place(ctx, BuildingKind::House, (80, 50), &[builder], None, 1)
+    });
+    assert_eq!(placed.ok(), Some(true));
+    assert_eq!(
+        seat.orders.iter().find_map(|o| match o {
+            aoe_sdk::Order::Build { origin, .. } => Some((origin.x, origin.y)),
+            _ => None,
+        }),
+        Some((84, 53)),
+        "the next site, one a villager reaches"
+    );
+    assert!(board.bad_sites.contains(&("House".to_owned(), 83, 53)));
+}
