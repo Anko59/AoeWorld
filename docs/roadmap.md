@@ -37,8 +37,7 @@ Owner 11-24: "priority goes to any decisions we still have to take that block th
 
 ## Ten highest-priority items from the 11-26 brief
 
-Order follows the owner's 11-26 emphasis. Reconciled 2026-11-27 against `origin/dev` at `5ffbb643a503`,
-with the subsequent #1136 merge checked at `aa375f82e29b`.
+Order follows the owner's 11-26 emphasis. Reconciled 2026-11-28 against the first-parent merge log of `origin/dev` through `43546734ccf6`.
 The owner is away 2026-11-27 to 2026-11-30.
 
 Last playtest, 11-25 (play25, dev 2d7ae70aa, 99 Python AIs): the converted Anatolia 5 save was "absolutely
@@ -55,17 +54,19 @@ unplayable" and was dropped. The new France game was "a pleasure, still nearly n
    ([movement](roadmap/movement.md), #978).
 4. Late-game server lag **PARTIAL**. France reached 6.0 of the target 10 ticks/s at 63.5k units on 11-25, up from
    4.0 at 61.5k on 11-19. Measure a live owner game with default Rust AI and route caps removed ([scale](roadmap/scale.md)).
-5. Wasted unit work. **IN FLIGHT #1114** covers unreachable gathering and foundations, and enemy-blocked crews.
-   Attack-move still needs to engage enemy buildings in its path ([gameplay](roadmap/gameplay.md)).
+5. Wasted unit work **PARTIAL**. #1114 merged reachability checks for gathering and construction and suspends
+   occupied foundations. Attack-move still needs to engage enemy buildings in its path ([gameplay](roadmap/gameplay.md)).
 6. Client stutter **PARTIAL**. #1112 improved France 11 crowded-hold p99 from 10,145 to 127 ms and pan p99 from
-   1,487 to 793 ms. Pan work is **IN FLIGHT #1129**; recheck long frames in play ([scale](roadmap/scale.md)).
+   1,487 to 793 ms. #1129 merged terrain preparation ahead of fast pans, with pan median 125 to 37 ms
+   in its benchmark. Recheck long frames in play ([scale](roadmap/scale.md)).
 7. Formation coherence and Steward arrival **PARTIAL**. Wide formations still file into long lines on real terrain.
    The Steward transfer baseline was 80–82%; rerun quality metrics with the merged route changes ([movement](roadmap/movement.md)).
 8. Walking-distance zones and office cooperation **PARTIAL**. Server walking membership landed in #1038 and shared
-   Vassal builders in #962. Client outlines were **IN FLIGHT #1136** at the brief cutoff and merged at 07:21 CET. Recheck in play
+   Vassal builders in #962. #1136 merged client outlines in both views. Recheck in play
    ([hierarchy](roadmap/hierarchy.md)).
 9. Other caps and budgets **PARTIAL**. #1029 removed global attack-position search caps and #1038 removed global
-   office visit and per-visit limits. Remaining caps follow the owner's "solve, not limit and hide" rule ([caps](roadmap/caps.md)).
+   office visit and per-visit limits. #1140 removed fixed limits for General admissions, Vassal plans,
+   wall orders and builders looking for a next foundation. Remaining caps follow the owner's "solve, not limit and hide" rule ([caps](roadmap/caps.md)).
 10. Fights and AIs **PARTIAL**, deprioritised by the owner on 11-26. #1026 removed engagement caps and #1034 improved
     march response and defence. Engaged armies still stack too tightly, and late-game attacks away from home need a
     play recheck with the Rust AI ([gameplay](roadmap/gameplay.md), [AI](roadmap/ai.md)).
@@ -85,6 +86,16 @@ recheck in play. The hierarchy build order stays provinces first.
   Also map cache recovery #1124, nightly triage #1116, native timing assertions #1119, browser repeat/retry #1113/#1130,
   scheduled dependency audit #1123, Anatolia package command #1118 and dependency updates #1110.
 - Harness and docs: real-map game score #1128, CI report #1115 and 11-26 owner feedback #1104.
+
+## Roadmap changes reconciled on 2026-11-28
+
+- #1114 closed the unreachable-work and occupied-foundation items. Attack-move through enemy buildings remains open.
+- #1151 increased gold per pile and doubled Outpost sight. #1160 landed resource regrowth and recovery.
+  #1161 landed relics. #1165 measured the France pacing baseline for the open balance work.
+- #1135 and #1142 added local ship comparisons and staged ford scenarios to the game score.
+- #1025 landed the far-view training workflow, Shift button placement, wide management controls and DE roads.
+  #974, #957, #1020, #969 and #961 also have merged UI rows. Styling and reports awaiting play verification
+  remain in the open table.
 
 ## Source conflicts resolved in this roadmap
 
