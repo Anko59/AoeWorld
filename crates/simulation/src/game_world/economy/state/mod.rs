@@ -64,6 +64,8 @@ pub(crate) struct Economy {
     pub(crate) transport_journeys: BTreeMap<EntityId, super::super::navy::Journey>,
     pub(crate) embarked: BTreeMap<EntityId, EntityId>,
     pub(crate) players: BTreeMap<PlayerId, PlayerEconomy>,
+    /// Derived from living units, including garrisons and passengers.
+    pub(crate) upkeep_units: BTreeMap<PlayerId, u32>,
     /// Owners whose population space is counted when the bulk load under way
     /// ends (`GameWorld::count_housing_once`); `None` outside one.
     pub(crate) housing_due: Option<BTreeSet<PlayerId>>,

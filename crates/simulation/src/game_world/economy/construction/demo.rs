@@ -326,6 +326,28 @@ impl GameWorld {
         Ok((world, primary))
     }
 
+    /// A supplied company exhausts its small reserve in a few seconds of play.
+    pub fn food_upkeep_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
+        let (mut world, primary) = Self::military_demo(seed)?;
+        world.isolate_economy_demo(primary);
+        let owner = PlayerId(0);
+        let state = world
+            .economy
+            .players
+            .get_mut(&owner)
+            .ok_or(EconomyError::NotOwner)?;
+        state.stockpile.food = 12;
+        for row in 0..5 {
+            for col in 0..6 {
+                let position =
+                    aoe_core::WorldPosition::from_tile_center(TileCoord::new(126 + col, 134 + row))
+                        .map_err(|_| EconomyError::InvalidFootprint)?;
+                world.spawn_kind(owner, crate::UnitKind::Militia, position)?;
+            }
+        }
+        Ok((world, primary))
+    }
+
     pub fn feudal_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
         let mut config =
             WorldConfig::new(256, 256, seed).map_err(|_| EconomyError::InvalidFootprint)?;

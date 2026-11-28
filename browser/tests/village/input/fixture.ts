@@ -123,7 +123,7 @@ export async function inputFixture(
         socket.send(
           Buffer.from([
             0,
-            4,
+            36,
             1,
             0,
             0,

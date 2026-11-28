@@ -8,7 +8,10 @@ fn at(x: i32, y: i32) -> TileCoord {
 }
 
 pub(super) fn mill_and_farm() -> (GameWorld, EntityId, EntityId, EntityId) {
-    let (mut world, _, _) = village();
+    let (mut world, scout, _) = village();
+    // Track the farm's gross deliveries in a village with no army expenses.
+    world.kill_unit(world.lookup[&scout]);
+    world.remove_unit(scout);
     set_stock(&mut world, 0, 1000, 0, 0);
     let worker = villager_at(&mut world, 99, 100);
     let farm_site = at(103, 100);

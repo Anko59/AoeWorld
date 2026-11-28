@@ -157,6 +157,13 @@ impl GameplayService {
         let (world, primary) = GameWorld::steward_territory_demo(seed)?;
         Ok(Self::from_world(world, primary, None, None))
     }
+    pub(crate) fn food_upkeep_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
+        let (world, primary) = GameWorld::food_upkeep_demo(seed)?;
+        let service = Self::from_world(world, primary, None, None);
+        service.set_paused(true);
+        Ok(service)
+    }
+
     pub fn military_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
         let (world, primary) = GameWorld::military_demo(seed)?;
         Ok(Self::from_world(world, primary, None, None))

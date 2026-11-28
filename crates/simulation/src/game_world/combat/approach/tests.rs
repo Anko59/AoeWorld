@@ -94,7 +94,7 @@ fn contact_probe_keeps_its_route_until_the_next_blow_is_ready() {
     w.begin_autonomous_attack(actor, distant, at(50));
     w.tick.0 = (4 - u64::from(actor.0) % 4) % 4;
     let index = w.lookup[&actor];
-    w.units[index].next_hit_tick = w.tick.0 + 10;
+    w.set_weapon_cooldown(index, 10);
     let attacker = w.combat.attackers[&actor];
     let goal = w.attack_goal(distant, PlayerId(0));
     let stats = w.unit_stats(actor).unwrap();

@@ -315,6 +315,7 @@ impl GameWorld {
         self.place_town_center(player, origin)?;
         if let Some(state) = self.economy.players.get_mut(&player) {
             state.stockpile = VILLAGE_RULES.starting_stockpile;
+            state.clear_funded_shortage();
         }
         for tile in perimeter
             .into_iter()

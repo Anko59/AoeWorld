@@ -98,7 +98,7 @@ fn housing_lifecycle() -> [u8; 32] {
     assert_eq!(world.building(center).unwrap().training_queue.len(), 13);
     assert_eq!(
         world.player_economy(PlayerId(0)).unwrap().stockpile.food,
-        250
+        250 - 1 // One whole minute of upkeep for the starting Scout.
     );
     world.canonical_hash()
 }

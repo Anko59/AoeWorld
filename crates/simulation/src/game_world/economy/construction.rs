@@ -248,6 +248,7 @@ impl GameWorld {
         self.remove_building(building);
         if let Some(state) = self.economy.players.get_mut(&player) {
             add(&mut state.stockpile, refund);
+            state.clear_funded_shortage();
         }
         // Their foundation is gone; the per-tick pass releases the builders.
         Ok(())

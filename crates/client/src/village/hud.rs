@@ -49,7 +49,7 @@ pub(in super::super) fn update(client: &Client) {
     }
     let overview = crate::playground::game::strategic::active(client);
     // Header: four stockpiles, used/cap, four worker counts, clock,
-    // native-art flag, actor count and the two idle counts. Each actor
+    // native-art flag, actor and idle counts, upkeep rate and shortage. Each actor
     // record contains nineteen numbers. Production rows follow the actors.
     // Decode immediately in JS; never retain a view of WASM memory.
     // One geometry snapshot precedes every panel write. Later panels share it
@@ -124,13 +124,15 @@ pub(in super::super) fn update(client: &Client) {
             .copied()
             .unwrap_or(y - 42.0 * client.camera.zoom)
     };
-    let mut values = vec![0.0; 15];
+    let mut values = vec![0.0; 17];
     values[13] = client.village.idle_villagers.len() as f64;
     values[14] = client.village.idle_military.len() as f64;
     values[10] = (client.village.tick / u64::from(client.config.tick_hz.max(1))) as f64;
     values[11] = flag(client.art.compositions.iter().any(|b| !b.parts.is_empty()));
     if let Some(player) = client.village.players.iter().find(|p| p.player == owner) {
         let s = player.stockpile;
+        values[15] = f64::from(player.food_upkeep_per_minute);
+        values[16] = flag(player.food_upkeep_shortage);
         values[..6].copy_from_slice(&[
             f64::from(s.wood),
             f64::from(s.food),

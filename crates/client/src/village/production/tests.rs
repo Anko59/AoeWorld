@@ -63,6 +63,8 @@ fn shortest_queue_counts_burst_clicks_and_ignores_ineligible_selected_buildings(
         unit_counts: [0; aoe_protocol::UnitKind::ALL.len()],
         held_tiles: 0,
         held_share_ppm: 0,
+        food_upkeep_per_minute: 0,
+        food_upkeep_shortage: false,
         market_prices: Default::default(),
     };
     let mut selected = Selection::default();
@@ -154,6 +156,8 @@ fn full_queues_do_not_reintroduce_locked_or_superseded_training_buttons() {
         unit_counts: [0; aoe_protocol::UnitKind::ALL.len()],
         held_tiles: 0,
         held_share_ppm: 0,
+        food_upkeep_per_minute: 0,
+        food_upkeep_shortage: false,
         market_prices: Default::default(),
     };
     let mut pending = PendingTraining::default();
@@ -235,6 +239,8 @@ fn grouped_steward_training_skips_town_centers_with_an_occupant_or_pending_unit(
         unit_counts: [0; aoe_protocol::UnitKind::ALL.len()],
         held_tiles: 0,
         held_share_ppm: 0,
+        food_upkeep_per_minute: 0,
+        food_upkeep_shortage: false,
         market_prices: Default::default(),
     };
     let mut selected = Selection::default();

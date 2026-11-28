@@ -187,6 +187,7 @@ impl GameWorld {
         // No fallible work follows these mutations.
         state.stockpile.gold -= cost;
         state.stockpile.market_add(kind, MARKET_RULES.trade_amount);
+        state.clear_funded_shortage();
         let price = MARKET_RULES.raise(price);
         state.market_prices.set(kind, price);
         self.economy
@@ -279,6 +280,7 @@ impl GameWorld {
         if done == 0 {
             return Err(EconomyError::InsufficientResources);
         }
+        state.clear_funded_shortage();
         state.market_prices.set(kind, price);
         self.economy
             .market_recovery

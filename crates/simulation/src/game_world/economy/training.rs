@@ -54,6 +54,9 @@ impl GameWorld {
             .players
             .get(&player)
             .ok_or(EconomyError::NotOwner)?;
+        if kind.needs_food_upkeep() && self.food_upkeep(player).1 {
+            return Err(EconomyError::InsufficientFood);
+        }
         let seconds = if kind == UnitKind::Villager {
             if state.stockpile.food < VILLAGE_RULES.villager_food_cost {
                 return Err(EconomyError::InsufficientFood);
@@ -117,6 +120,7 @@ impl GameWorld {
                     .stockpile
                     .food
                     .saturating_add(VILLAGE_RULES.villager_food_cost);
+                state.clear_funded_shortage();
             }
         } else {
             self.refund_unit_cost(player, entry.kind);

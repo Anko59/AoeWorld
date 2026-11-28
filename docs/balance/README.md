@@ -40,6 +40,9 @@ without a footer is incomplete.
 - The census counts completed standing Town Centers and living villagers and
   army, including garrisons. The army includes scouts, monks and Generals.
   Transports, fishing and trade units, Stewards and Vassals are excluded.
+- Food upkeep is the current bill per game minute. Shortage means a
+  payment was missed and the stockpile still has no food. Samples capture
+  the state at the recorded tick.
 - Contact is the first authoritative line of sight to another seat's living
   unit or public building, checked every tick for each seat independently.
   It can be a scout sighting before any fighting. The event records the
@@ -47,3 +50,5 @@ without a footer is incomplete.
   in that tick. Unobserved contact stays null through the final sample.
 
 The first completed measurements are in the [France baseline](france-baseline.md).
+The food upkeep trial repeats both seat counts on the same France map request.
+[France food upkeep report](france-upkeep.md)

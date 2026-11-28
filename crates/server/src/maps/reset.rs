@@ -192,8 +192,8 @@ pub(crate) async fn reset(
         Some(
             name @ ("roads" | "vassal-defense" | "feudal-economy" | "steward-economy"
             | "steward-territory" | "steward-farming" | "steward-kingdom"
-            | "feudal-military" | "general-army" | "general-appearance" | "imperial-army"
-            | "trade-wonder" | "steward-fishing" | "steward-throughput"
+            | "feudal-military" | "food-upkeep" | "general-army" | "general-appearance"
+            | "imperial-army" | "trade-wonder" | "steward-fishing" | "steward-throughput"
             | "steward-stability" | "walk-crowd" | "selection-orders" | "army-orders"),
         ) => {
             let constructor = match name {
@@ -211,6 +211,7 @@ pub(crate) async fn reset(
                 "walk-crowd" => GameplayService::walk_crowd_demo,
                 "selection-orders" => GameplayService::selection_orders_demo,
                 "general-army" => GameplayService::general_demo,
+                "food-upkeep" => GameplayService::food_upkeep_demo,
                 "imperial-army" => GameplayService::imperial_demo,
                 "trade-wonder" => GameplayService::trade_demo,
                 "general-appearance" => GameplayService::general_appearance_demo,

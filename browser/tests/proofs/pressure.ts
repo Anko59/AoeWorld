@@ -104,21 +104,21 @@ export async function pressureProof(page: Page, url: string, phase: string) {
   const fixtureChunks = [-1, 0].flatMap((y) =>
     [-1, 0].map((x) => syntheticChunk(256 + x, 256 + y, false)),
   );
+  const welcome = [
+    0,
+    36,
+    1,
+    0,
+    0,
+    ...uint(32768),
+    ...uint(32768),
+    ...uint(1024),
+    20,
+    0,
+    ...Array<number>(24).fill(1),
+  ];
   await showcasePage({
-    hello: [
-      0,
-      2,
-      1,
-      0,
-      0,
-      ...uint(32768),
-      ...uint(32768),
-      ...uint(1024),
-      20,
-      0,
-      0,
-      0,
-    ],
+    hello: welcome,
     snapshot: [
       ...uint(2000),
       ...units,
@@ -141,23 +141,7 @@ export async function pressureProof(page: Page, url: string, phase: string) {
     socket.onMessage((message) => {
       const bytes =
         typeof message === "string" ? Buffer.from(message) : message;
-      if (bytes[0] === 0)
-        socket.send(
-          Buffer.from([
-            0,
-            2,
-            1,
-            0,
-            0,
-            ...uint(32768),
-            ...uint(32768),
-            ...uint(1024),
-            20,
-            0,
-            0,
-            0,
-          ]),
-        );
+      if (bytes[0] === 0) socket.send(Buffer.from(welcome));
       if (bytes[0] !== 1) return;
       revision = [];
       for (const byte of bytes.subarray(1)) {

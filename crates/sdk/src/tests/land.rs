@@ -312,3 +312,34 @@ fn a_monastery_with_its_whole_perimeter_sealed_has_no_walking_approach() {
         None
     );
 }
+
+#[test]
+fn build_sites_require_exact_exploration_and_remember_it_after_the_window_moves() {
+    let mut world = started();
+    world.apply(M::FogState(FogState {
+        revision: 1,
+        tick: Tick(1),
+        region: TileRect::from_xywh(100, 100, 2, 2),
+        disabled: false,
+        tiles: vec![0, 2, 0, 1],
+        overview: vec![(128 * 256 + 128, 1)],
+    }));
+    assert!(world.fog().explored_exactly(TileCoord::new(101, 100)));
+    assert!(!world.fog().explored_exactly(TileCoord::new(100, 100)));
+    assert!(!world.fog().explored_exactly(TileCoord::new(100, 101)));
+    world.apply(M::FogState(FogState {
+        revision: 1,
+        tick: Tick(2),
+        region: TileRect::from_xywh(0, 0, 2, 2),
+        disabled: false,
+        tiles: vec![0; 4],
+        overview: vec![],
+    }));
+    assert_eq!(
+        world.visibility(TileCoord::new(100, 100)),
+        Visibility::Explored
+    );
+    assert!(!world.fog().explored_exactly(TileCoord::new(100, 100)));
+    assert!(world.fog().explored_exactly(TileCoord::new(101, 100)));
+    assert!(!world.fog().explored_exactly(TileCoord::new(100, 101)));
+}

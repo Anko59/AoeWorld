@@ -130,6 +130,7 @@ pub fn step(ctx: &mut Context<'_>) -> Result<(), OrderBudgetExhausted> {
             })
             .min();
         if let Some((_, site)) = train
+            && crate::roster::can_recruit(ctx, UnitKind::Monk)
             && ctx.try_spend(price(UnitKind::Monk))?
         {
             ctx.order_or_stop(

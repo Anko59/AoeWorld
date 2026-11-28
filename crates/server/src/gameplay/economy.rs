@@ -210,6 +210,7 @@ pub(super) fn player(world: &GameWorld, viewer: PlayerId) -> Option<GameplayPlay
     });
     let mut report = player_state(&state, world.recent_deliveries(viewer), counts);
     (report.held_tiles, report.held_share_ppm) = world.held_land(viewer);
+    (report.food_upkeep_per_minute, report.food_upkeep_shortage) = world.food_upkeep(viewer);
     Some(report)
 }
 
@@ -240,6 +241,8 @@ fn player_state(
         unit_counts,
         held_tiles: 0,
         held_share_ppm: 0,
+        food_upkeep_per_minute: 0,
+        food_upkeep_shortage: false,
     }
 }
 pub(super) fn building_in_camera(

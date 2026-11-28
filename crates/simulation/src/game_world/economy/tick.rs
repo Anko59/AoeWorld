@@ -91,6 +91,7 @@ impl GameWorld {
             self.advance_resource_recovery(sink);
         }
         probe(TickPhase::Wildlife);
+        self.charge_food_upkeep();
         if self.economy.gatherers.is_empty()
             && !self.has_pending_conquest()
             && self.combat.is_idle()

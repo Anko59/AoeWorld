@@ -64,7 +64,7 @@ pub fn best_recruit(
     let enemy_size: u32 = enemies.values().sum();
     let (mut best, mut best_score) = (None, 0.0);
     for &kind in choices {
-        if ctx.board.blocked_units.contains(&format!("{kind:?}")) || !ctx.can_afford(price(kind)) {
+        if ctx.board.blocked_units.contains(&format!("{kind:?}")) || !can_recruit(ctx, kind) {
             continue;
         }
         let row = profile(kind);
@@ -95,6 +95,24 @@ pub fn best_recruit(
         }
     }
     best
+}
+
+/// Leave enough food to support the current army before adding to it.
+pub fn can_recruit(ctx: &Context<'_>, kind: UnitKind) -> bool {
+    let cost = price(kind);
+    ctx.can_afford(cost)
+        && (!rules::unit_needs_food_upkeep(kind) || has_army_supplies(ctx, cost[0]))
+}
+
+pub fn has_army_supplies(ctx: &Context<'_>, recruitment_food: u32) -> bool {
+    let Some(economy) = &ctx.economy else {
+        return false;
+    };
+    let reserve = economy
+        .food_upkeep_per_minute
+        .saturating_mul(ctx.config.army_food_reserve_minutes);
+    !economy.food_upkeep_shortage
+        && ctx.can_afford([recruitment_food.saturating_add(reserve), 0, 0, 0])
 }
 
 /// `(food, wood, gold, stone)` to queue a unit.

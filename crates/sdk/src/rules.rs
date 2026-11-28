@@ -290,6 +290,11 @@ pub fn trainable(building: BuildingKind) -> Vec<UnitKind> {
         .collect()
 }
 
+/// Whether a living unit contributes to its owner’s food upkeep.
+pub fn unit_needs_food_upkeep(kind: UnitKind) -> bool {
+    native_unit(kind).needs_food_upkeep()
+}
+
 /// What queueing a unit costs.
 pub fn unit_cost(kind: UnitKind) -> Stockpile {
     match kind {

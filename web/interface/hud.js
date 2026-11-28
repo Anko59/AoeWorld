@@ -58,6 +58,8 @@ export function initInterface() {
     ['wood','food','gold','stone'].forEach((resource,index) => {
       text(`stockpile-${resource}`,state.stockpile[index]); text(`workers-${resource}`,state.workers[index]);
     });
+    text('food-upkeep',`−${state.foodUpkeep}/min`);
+    set(byId('food-upkeep-shortage'), 'hidden', !state.foodUpkeepShortage);
     text('population',state.population.join('/'));
     text('idle-villager-count',state.idleVillagers);
     set(byId('idle-villagers'), 'disabled', state.idleVillagers===0);
@@ -84,7 +86,9 @@ export function initInterface() {
     const state={stockpile:values.slice(0,4),population:values.slice(4,6),workers:values.slice(6,10),seconds:values[10],art:values[11]===1,status,actors:[],selected:[],queue:null,trainingRows:[]};
     state.idleVillagers=values[13];
     state.idleMilitary=values[14];
-    let at=15;
+    state.foodUpkeep=values[15];
+    state.foodUpkeepShortage=values[16]===1;
+    let at=17;
     for (let index=0;index<values[12];index++,at+=19) {
       const [id,kind,x,y,selected,task,resource,amount,hp,maxHp,attack,melee,pierce,head,capacity,range,player,owned,colour]=values.subarray(at,at+19);
       const actorKind = actorKinds[kind];

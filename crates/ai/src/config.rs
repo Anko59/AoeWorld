@@ -99,6 +99,13 @@ pub struct Config {
 
     // --- military ---
     pub army_min_villagers: u32,
+    /// Minimum current army supplies after beginning military production.
+    pub army_food_reserve_minutes: u32,
+    /// Additional food reserve per idle soldier outside an emergency defence.
+    pub idle_army_food_reserve_minutes: u32,
+    /// Expected credited food per minute from one additional farmer.
+    pub upkeep_food_per_worker_minute: u32,
+    pub upkeep_max_food_share: f64,
     pub emergency_army_villagers: u32,
     /// Spearmen : archers : skirmishers, in this order.
     pub army_mix: Vec<(UnitKind, f64)>,
@@ -281,6 +288,10 @@ impl Default for Config {
             loom_villagers: 10,
             feudal_villagers: 21,
             army_min_villagers: 18,
+            army_food_reserve_minutes: 1,
+            idle_army_food_reserve_minutes: 1,
+            upkeep_food_per_worker_minute: 14,
+            upkeep_max_food_share: 0.25,
             emergency_army_villagers: 6,
             army_mix: vec![
                 (UnitKind::Spearman, 4.0),

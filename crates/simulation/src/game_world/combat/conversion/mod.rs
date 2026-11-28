@@ -131,10 +131,9 @@ impl GameWorld {
                 .chain(std::iter::once(monk))
                 .collect()
         };
-        let until = self.tick.0 + rest;
         for id in resting {
             if let Some(&index) = self.lookup.get(&id) {
-                self.units[index].next_hit_tick = until;
+                self.set_weapon_cooldown(index, rest);
             }
         }
         if !is_unit {

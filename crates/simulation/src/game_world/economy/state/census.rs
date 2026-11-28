@@ -72,6 +72,20 @@ impl GameWorld {
         if count == 0 {
             return;
         }
+        let supplied =
+            |kind: Option<crate::UnitKind>| kind.is_some_and(crate::UnitKind::needs_food_upkeep);
+        match (supplied(from), supplied(to)) {
+            (false, true) => *self.economy.upkeep_units.entry(player).or_default() += count,
+            (true, false) => {
+                if let Some(total) = self.economy.upkeep_units.get_mut(&player) {
+                    *total -= count;
+                    if *total == 0 {
+                        self.economy.upkeep_units.remove(&player);
+                    }
+                }
+            }
+            _ => {}
+        }
         let cache = self
             .economy
             .census

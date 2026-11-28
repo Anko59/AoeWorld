@@ -76,6 +76,8 @@ export function playerState(
     ...Array<number>(60).fill(0), // Current authoritative census (UnitKind::ALL).
     0, // Held tiles.
     0, // Held map share, in millionths.
+    0, // Food upkeep per minute.
+    0, // Food upkeep shortage.
   ];
 }
 

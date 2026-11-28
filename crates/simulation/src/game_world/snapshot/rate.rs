@@ -15,6 +15,9 @@ impl WorldSnapshot {
                 .unwrap_or(u64::MAX)
         };
         self.tick = at(self.tick);
+        for player in &mut self.players {
+            player.upkeep_slow_ticks = at(player.upkeep_slow_ticks);
+        }
         for (_, tick) in &mut self.last_hostile_ticks {
             *tick = at(*tick);
         }

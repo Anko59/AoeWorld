@@ -7,7 +7,8 @@ use super::combat::march::{Purpose, march};
 use crate::context::{Context, OrderBudgetExhausted};
 use crate::geometry::{clamp_tile, dist, nearest};
 use crate::roster::{
-    best_recruit, land_producers, land_soldier, options, price, profile, visible_composition,
+    best_recruit, has_army_supplies, land_producers, land_soldier, options, price, profile,
+    visible_composition,
 };
 use crate::view::Tile;
 
@@ -46,6 +47,17 @@ pub fn train(ctx: &mut Context<'_>) -> Done {
         && !defending
     {
         return Ok(());
+    }
+    if !defending && eco.food_upkeep_per_minute > 0 {
+        let idle = ctx
+            .army
+            .iter()
+            .chain(&ctx.led)
+            .filter(|unit| unit.alive && unit.idle)
+            .count() as u32;
+        if !has_army_supplies(ctx, idle.saturating_mul(cfg.idle_army_food_reserve_minutes)) {
+            return Ok(());
+        }
     }
     let trainers: Vec<_> = ctx
         .buildings

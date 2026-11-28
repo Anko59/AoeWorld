@@ -50,7 +50,7 @@ impl GameWorld {
     ) -> bool {
         let unit = &self.units[index];
         let now = self.tick.0;
-        let ready = unit.next_hit_tick;
+        let ready = self.weapon_ready_tick(index);
         let Some(delay) = native_attack_windup_millis(unit.state.kind) else {
             return now >= ready;
         };

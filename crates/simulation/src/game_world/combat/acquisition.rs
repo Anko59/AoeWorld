@@ -32,7 +32,7 @@ impl GameWorld {
     ) -> super::Attacker {
         let u = self.units[index].state;
         let id = u.id;
-        let ready = self.tick.0 >= self.units[index].next_hit_tick;
+        let ready = self.tick.0 >= self.weapon_ready_tick(index);
         if (attacker.origin.is_none() && attacker.resume.is_none())
             || !ready
             // First contact reacts immediately; repeat probes keep the bounded
