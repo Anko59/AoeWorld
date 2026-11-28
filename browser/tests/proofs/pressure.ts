@@ -106,7 +106,7 @@ export async function pressureProof(page: Page, url: string, phase: string) {
   );
   const welcome = [
     0,
-    35,
+    36,
     1,
     0,
     0,

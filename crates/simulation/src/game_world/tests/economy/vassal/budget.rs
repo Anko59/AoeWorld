@@ -103,3 +103,74 @@ fn pending_search_progress_is_hashed_deterministically() {
     b.advance_vassals(&mut Vec::new());
     assert_eq!(a.canonical_hash(), b.canonical_hash());
 }
+
+#[test]
+fn vassal_caps_reserve_pause_and_completed_land_stops_spending() {
+    let (mut w, v, _) = setup();
+    // Explored ground carries the wall ring; under fog it is not planned.
+    w.set_fog_disabled(true);
+    for i in 0..25 {
+        let pos = WorldPosition::from_tile_center(TileCoord::new(84 + i % 5, 96 + i / 5)).unwrap();
+        w.spawn_villager(PlayerId(0), pos).unwrap();
+        w.spawn_kind(PlayerId(0), UnitKind::Militia, pos).unwrap();
+    }
+    w.issue_vassal_development(PlayerId(0), v, false).unwrap();
+    advance(&mut w, 40);
+    let s = w.vassal_status(v).unwrap();
+    assert_eq!(s.military, 20);
+    assert!(
+        w.economy.dispatch.sites.is_empty(),
+        "pausing stops placement"
+    );
+    let ticks_per_minute = u64::from(w.config().tick_hz) * 60;
+    // The Scout was alone for setup's two ticks before 25 Militia joined.
+    let upkeep = |tick: u64| ((26 * tick - 50) / ticks_per_minute) as u32;
+    let paid = upkeep(w.tick().0);
+    let mut before = w.player_economy(PlayerId(0)).unwrap().stockpile;
+    advance(&mut w, 40);
+    before.food -= upkeep(w.tick().0) - paid;
+    assert_eq!(w.player_economy(PlayerId(0)).unwrap().stockpile, before);
+    w.issue_vassal_development(PlayerId(0), v, true).unwrap();
+    advance(&mut w, 20);
+    assert!(!w.economy.dispatch.sites.is_empty());
+    for _ in 0..60_000 {
+        w.advance();
+        if w.vassal_status(v).unwrap().developed {
+            break;
+        }
+    }
+    assert!(
+        w.vassal_status(v).unwrap().developed,
+        "finite fortification plan must finish: {:?}; foundations {:?}; workers {:?}",
+        w.vassal_status(v),
+        w.buildings()
+            .filter(|b| !b.is_complete())
+            .map(|b| (b.kind, b.footprint, b.work_done, b.work_total))
+            .collect::<Vec<_>>(),
+        w.units()
+            .filter(|u| {
+                let t = u.position.tile_floor();
+                (85..=88).contains(&t.x) && (96..=99).contains(&t.y)
+            })
+            .map(|u| (
+                u.id,
+                u.kind,
+                u.position,
+                u.task,
+                u.moving,
+                w.vassal_controller(u.id)
+            ))
+            .collect::<Vec<_>>()
+    );
+    assert!(w.economy.dispatch.sites.is_empty());
+    let paid = upkeep(w.tick().0);
+    let mut after = w.player_economy(PlayerId(0)).unwrap().stockpile;
+    advance(&mut w, 100);
+    after.food -= upkeep(w.tick().0) - paid;
+    assert_eq!(w.player_economy(PlayerId(0)).unwrap().stockpile, after);
+    assert!(w.buildings().any(|b| b.kind.is_gate() && b.is_complete()));
+    assert_eq!(
+        w.issue_vassal_development(PlayerId(1), v, false),
+        Err(EconomyError::NotOwner)
+    );
+}

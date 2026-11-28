@@ -50,3 +50,5 @@ without a footer is incomplete.
   in that tick. Unobserved contact stays null through the final sample.
 
 The first completed measurements are in the [France baseline](france-baseline.md).
+The food upkeep trial repeats both seat counts on the same France map request.
+[France food upkeep report](france-upkeep.md)

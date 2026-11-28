@@ -44,7 +44,7 @@ export async function populationFixture(page: Page) {
         socket.send(
           Buffer.from([
             0,
-            35,
+            36,
             1,
             0,
             0,

@@ -10,6 +10,14 @@ fn kill_scenario() -> (GameWorld, EntityId, [EntityId; 3]) {
     world
         .place_town_center(PlayerId(1), TileCoord::new(150, 150))
         .unwrap();
+    // Keep the attacker supplied during its long march to the last victim.
+    world
+        .economy
+        .players
+        .get_mut(&PlayerId(0))
+        .unwrap()
+        .stockpile
+        .food = 10;
     // The first-spawned victim is swapped out of the dense array when it dies;
     // the others live in different spatial chunks.
     let victims = [at(101, 100), at(60, 200), at(200, 30)]

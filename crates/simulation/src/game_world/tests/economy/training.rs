@@ -197,7 +197,7 @@ fn food_queue_and_serial_training_limits_use_one_rules_table() {
     assert!(world.building(center).unwrap().training_queue.is_empty());
     assert_eq!(
         world.player_economy(PlayerId(0)).unwrap().stockpile.food,
-        50
+        50 - 6 // Six game minutes of upkeep for the starting Scout.
     );
     world
         .economy

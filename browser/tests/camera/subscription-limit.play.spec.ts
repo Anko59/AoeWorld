@@ -33,7 +33,7 @@ test("an over-limit camera guard falls back to the visible subscription", async 
         socket.send(
           Buffer.from([
             0,
-            35,
+            36,
             1,
             0,
             0,

@@ -216,6 +216,10 @@ fn stalled_food(
 fn remote_income_world(kind: ResourceKind, stalled: bool) -> RemoteIncome {
     assert!(!stalled || kind == ResourceKind::Food);
     let (mut w, local, local_workers, node) = wood_realm(20);
+    // This fixture compares gross deposits and stock-neutral transactions.
+    let scout = w.units().find(|u| u.kind == UnitKind::Scout).unwrap().id;
+    w.kill_unit(w.lookup[&scout]);
+    w.remove_unit(scout);
     let local_town_center = w.steward_town_center(local).unwrap();
     let local_rect = w.building(local_town_center).unwrap().footprint;
     w.issue_ungarrison(PlayerId(0), local_town_center, Some(local))
