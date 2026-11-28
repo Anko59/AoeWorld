@@ -280,6 +280,7 @@ fn fixtures_load_a_small_save_and_reject_its_snapshot_version() {
         0, // players
         0, // diplomatic stances
         0, // alliance offers
+        0, // last hostile ticks
         0, // market recovery
         0, // resources
         0, // buildings

@@ -9,7 +9,7 @@ use aoe_core::{EntityId, Formation, PlayerId, TileRect, WorldPosition};
 use aoe_map::ResourceOverlaySnapshot;
 use serde::{Deserialize, Serialize};
 
-pub const WORLD_SNAPSHOT_VERSION: u16 = 36;
+pub const WORLD_SNAPSHOT_VERSION: u16 = 37;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WorldSnapshot {
@@ -21,6 +21,8 @@ pub struct WorldSnapshot {
     pub players: Vec<PlayerEconomy>,
     pub(crate) stances: Vec<super::super::diplomacy::StanceRecord>,
     pub(crate) alliance_offers: Vec<(PlayerId, PlayerId)>,
+    /// Last damage tick for each unordered pair of seats that fought.
+    pub(crate) last_hostile_ticks: Vec<((PlayerId, PlayerId), u64)>,
     /// Remaining server ticks, independent of the save's game-time tick rate.
     pub(crate) market_recovery: Vec<(u64, PlayerId, MarketCommodity)>,
     /// Absent only for worlds without map terrain (test fixtures).

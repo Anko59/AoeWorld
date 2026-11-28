@@ -23,8 +23,8 @@ use std::{
 
 mod timing;
 
-/// Save format with diplomacy and the seat labels chosen at match start.
-pub const SAVE_VERSION: u16 = 28;
+/// Save format with the last hostile tick of each pair of seats.
+pub const SAVE_VERSION: u16 = 29;
 const MAX_NAME: usize = 60;
 const MAX_SAVE_BYTES: u64 = 2 << 30;
 

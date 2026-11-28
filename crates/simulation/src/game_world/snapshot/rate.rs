@@ -15,6 +15,9 @@ impl WorldSnapshot {
                 .unwrap_or(u64::MAX)
         };
         self.tick = at(self.tick);
+        for (_, tick) in &mut self.last_hostile_ticks {
+            *tick = at(*tick);
+        }
         self.relics.retime(at);
         for herd in &mut self.herd_recovery {
             herd.due = herd.due.map(at);

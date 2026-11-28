@@ -181,7 +181,18 @@ fn alliance_offers_require_acceptance_and_fail_during_war() {
     let militia = world.spawn_militia(FIRST, at(100, 100)).unwrap();
     let target = world.spawn_militia(SECOND, at(101, 100)).unwrap();
     world.issue_attack(FIRST, militia, target).unwrap();
-    assert!(world.offer_alliance(FIRST, SECOND).is_err());
+    assert!(!world.at_war(FIRST, SECOND));
+    for _ in 0..100 {
+        world.advance();
+        if world.unit(target).unwrap().last_hit.is_some() {
+            break;
+        }
+    }
+    assert!(world.unit(target).unwrap().last_hit.is_some());
+    assert_eq!(
+        world.offer_alliance(FIRST, SECOND),
+        Err(EconomyError::DiplomacyAtWar)
+    );
 }
 
 #[test]
@@ -219,4 +230,51 @@ fn only_complete_allied_market_positions_are_shared() {
         .set_diplomatic_stance(FIRST, SECOND, DiplomaticStance::Enemy)
         .unwrap();
     assert_eq!(world.allied_market_positions(FIRST).next(), None);
+}
+
+#[test]
+fn automatic_tower_damage_blocks_alliance_offers_until_combat_cools() {
+    let mut source = world();
+    let tower = source
+        .insert_building(
+            FIRST,
+            BuildingKind::WatchTower,
+            TileRect::from_xywh(98, 98, 1, 1),
+            true,
+        )
+        .unwrap();
+    let visitor = source.spawn_villager(SECOND, at(103, 98)).unwrap();
+    assert!(!source.at_war(FIRST, SECOND));
+    source.offer_alliance(FIRST, SECOND).unwrap();
+    for _ in 0..100 {
+        source.advance();
+        if source.unit(visitor).unwrap().last_hit.is_some() {
+            break;
+        }
+    }
+    assert!(source.unit(visitor).unwrap().last_hit.is_some());
+    assert_eq!(
+        source.offer_alliance(SECOND, FIRST),
+        Err(EconomyError::DiplomacyAtWar)
+    );
+    assert_eq!(
+        source.offer_alliance(FIRST, SECOND),
+        Err(EconomyError::DiplomacyAtWar)
+    );
+
+    source.destroy_building(tower);
+    source.remove_unit(visitor);
+    let snapshot = source.snapshot([0; 32]).unwrap();
+    let mut restored = GameWorld::new(source.config).unwrap();
+    restored
+        .restore_snapshot(&snapshot, [0; 32], &|| false)
+        .unwrap();
+    let cooldown = source.config.tick_hz * 10;
+    for _ in 0..cooldown {
+        assert!(restored.at_war(FIRST, SECOND));
+        restored.advance();
+    }
+    assert!(!restored.at_war(FIRST, SECOND));
+    restored.offer_alliance(SECOND, FIRST).unwrap();
+    assert!(restored.allied_seats(FIRST, SECOND));
 }

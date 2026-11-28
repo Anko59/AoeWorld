@@ -8,11 +8,14 @@ mod demo;
 #[cfg(test)]
 mod tests;
 
+const HOSTILITY_SECONDS: u64 = 10;
+
 pub(crate) type StanceRecord = (PlayerId, PlayerId, DiplomaticStance);
 
 #[derive(Debug, Default)]
 pub(crate) struct Diplomacy {
     stances: BTreeMap<(PlayerId, PlayerId), DiplomaticStance>,
+    pub(crate) last_hostile_ticks: BTreeMap<(PlayerId, PlayerId), u64>,
     // Recipient first, so an AI only reads offers sent to its own seat.
     pub(crate) offers: BTreeSet<(PlayerId, PlayerId)>,
 }
@@ -31,7 +34,22 @@ impl Diplomacy {
             .collect();
     }
 
+    pub(crate) fn record_hostile_damage(&mut self, from: PlayerId, to: PlayerId, tick: u64) {
+        if from != to {
+            self.last_hostile_ticks.insert(seat_pair(from, to), tick);
+        }
+    }
+
     pub(crate) fn hash(&self, hash: &mut blake3::Hasher) {
+        if !self.last_hostile_ticks.is_empty() {
+            hash.update(b"recent hostile damage\0");
+            hash.update(&(self.last_hostile_ticks.len() as u64).to_le_bytes());
+            for ((a, b), tick) in &self.last_hostile_ticks {
+                hash.update(&a.0.to_le_bytes());
+                hash.update(&b.0.to_le_bytes());
+                hash.update(&tick.to_le_bytes());
+            }
+        }
         if !self.offers.is_empty() {
             hash.update(b"alliance offers\0");
             hash.update(&(self.offers.len() as u64).to_le_bytes());
@@ -50,6 +68,10 @@ impl Diplomacy {
             }
         }
     }
+}
+
+fn seat_pair(a: PlayerId, b: PlayerId) -> (PlayerId, PlayerId) {
+    (a.min(b), a.max(b))
 }
 
 impl GameWorld {
@@ -154,30 +176,16 @@ impl GameWorld {
     pub fn at_war(&self, a: PlayerId, b: PlayerId) -> bool {
         let declared =
             |from, to| self.diplomacy.stances.get(&(from, to)) == Some(&DiplomaticStance::Enemy);
-        if declared(a, b) || declared(b, a) {
-            return true;
-        }
-        let owner = |id| {
-            self.lookup
-                .get(&id)
-                .map(|&index| self.units[index].state.player)
-                .or_else(|| {
-                    self.economy
-                        .buildings
-                        .get(&id)
-                        .map(|building| building.player)
-                })
-        };
-        let fighting = |source, target| matches!((owner(source), owner(target)), (Some(from), Some(to)) if (from, to) == (a,b) || (from, to) == (b,a));
-        self.combat
-            .attackers
-            .iter()
-            .any(|(&id, attack)| fighting(id, attack.target))
+        declared(a, b)
+            || declared(b, a)
             || self
-                .combat
-                .tower_targets
-                .iter()
-                .any(|(&id, &target)| fighting(id, target))
+                .diplomacy
+                .last_hostile_ticks
+                .get(&seat_pair(a, b))
+                .is_some_and(|&tick| {
+                    self.tick.0.saturating_sub(tick)
+                        < u64::from(self.config.tick_hz) * HOSTILITY_SECONDS
+                })
     }
 
     pub fn offer_alliance(&mut self, from: PlayerId, to: PlayerId) -> Result<(), EconomyError> {

@@ -82,12 +82,14 @@ impl GameWorld {
 
     fn apply_combat_damage(
         &mut self,
-        attacker: EntityId,
+        source: (EntityId, PlayerId),
         target: EntityId,
+        victim: Option<PlayerId>,
         hp: u16,
         raw: u16,
         elevation: bool,
     ) -> u16 {
+        let (attacker, player) = source;
         // DE multiplies total damage, not attack, and applies the minimum last.
         // Only living primary shooters contribute elevation at impact.
         let factor = if elevation && self.terrain.has_map_navigation() {
@@ -116,6 +118,12 @@ impl GameWorld {
         let hp = (left / 4) as u16;
         *quarter = if hp == 0 { 0 } else { (left % 4) as u8 };
         let after = u32::from(hp) * 4 + u32::from(*quarter);
+        if let Some(victim) = victim
+            && before > after
+        {
+            self.diplomacy
+                .record_hostile_damage(player, victim, self.tick.0);
+        }
         self.observe_damage(attacker, target, before - after);
         hp
     }
@@ -151,8 +159,9 @@ impl GameWorld {
             let (melee, pierce) = self.unit_armour(target).unwrap_or_default();
             let raw = super::table::damage_components(attack, kind, melee, pierce, bonus);
             let hp = self.apply_combat_damage(
-                source.0,
+                source,
                 target,
+                Some(victim.player),
                 self.units[victim_index].state.hp,
                 raw,
                 power.elevation,
@@ -177,7 +186,8 @@ impl GameWorld {
             changed.push(self.units[victim_index].state.id);
         } else if let Some(animal) = self.animal(target) {
             let before = animal.hp;
-            let hp = self.apply_combat_damage(attacker_id, target, before, attack, power.elevation);
+            let hp =
+                self.apply_combat_damage(source, target, None, before, attack, power.elevation);
             if self.strike_animal(target, attacker_id, before - hp) {
                 self.finish_target_attack(attacker_id, target, changed);
             }
@@ -200,8 +210,14 @@ impl GameWorld {
                 armour.pierce_armour + u16::from(masonry) + research_pierce,
                 bonus,
             );
-            let hp =
-                self.apply_combat_damage(attacker_id, target, building.hp, raw, power.elevation);
+            let hp = self.apply_combat_damage(
+                source,
+                target,
+                Some(building.player),
+                building.hp,
+                raw,
+                power.elevation,
+            );
             self.wake_construction(target);
             let Some(building) = self.building_mut(target) else {
                 return;
