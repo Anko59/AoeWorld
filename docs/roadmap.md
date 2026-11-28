@@ -71,9 +71,24 @@ unplayable" and was dropped. The new France game was "a pleasure, still nearly n
     march response and defence. Engaged armies still stack too tightly, and late-game attacks away from home need a
     play recheck with the Rust AI ([gameplay](roadmap/gameplay.md), [AI](roadmap/ai.md)).
 
-Owner ideas of 11-28, my order: test sanitation first (it speeds every other change), then the button design system, then the world-map setup picker. Next after these: recheck merged rock footprints (#926), DE road edges, far-view training flow and enemy foundation bars
-in play. Medieval DE styling remains for the training and activity panels. #974 merged bare furrows for unseeded farms;
-recheck in play. The hierarchy build order stays provinces first.
+### Operator priority order for 11-28
+
+1. Fix the load-game connection bug ([gameplay](roadmap/gameplay.md)).
+2. Run the civilisations data-import spike, then build out the civilisations ([gameplay](roadmap/gameplay.md)).
+3. Rework the bottom-menu command card layout and the units-seen indicator ([UI](roadmap/ui.md)).
+4. Add mixed tech/unit queues with click-to-cancel ([gameplay](roadmap/gameplay.md)).
+5. Add the Vassal sliders ([hierarchy](roadmap/hierarchy.md)).
+6. Fix draw order on hills and around ruins ([UI](roadmap/ui.md)).
+7. Write the Capture Age report, then deliver the stats panel in slices ([UI](roadmap/ui.md)).
+8. Build the button design system ([UI](roadmap/ui.md)).
+9. Build the world-map setup picker ([UI](roadmap/ui.md)).
+
+Test sanitation stays in flight ([harness](roadmap/harness.md)). The operator confirmed the General and Steward
+design limits ([caps](roadmap/caps.md)).
+
+Recheck merged rock footprints (#926), DE road edges, far-view training flow and enemy foundation bars in play.
+Medieval DE styling remains for the training and activity panels. #974 merged bare furrows for unseeded farms.
+Recheck them in play. The hierarchy build order stays provinces first.
 
 ## Merges since 2026-11-26 17:00
 
