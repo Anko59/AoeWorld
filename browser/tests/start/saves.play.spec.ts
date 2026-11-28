@@ -20,6 +20,24 @@ test("a saved game is listed on the main menu and resumes where it was", async (
   await completedJob(page, hash);
   await setup(page);
   const { population, saved } = await saveMatch(page);
+  const saveId = await page.locator("#save-status").getAttribute("data-saved");
+  if (!saveId)
+    throw new Error("The game menu did not report the saved game ID");
+
+  // Reopen the start page without a controller token. Hold the game client
+  // download so opening Load Game always happens before Welcome.
+  await page.addInitScript(() =>
+    localStorage.removeItem("aoeworld.resume-token"),
+  );
+  let releaseClient!: () => void;
+  const clientReady = new Promise<void>((resolve) => {
+    releaseClient = resolve;
+  });
+  await page.route("**/pkg/aoe_client_bg.wasm", async (route) => {
+    await clientReady;
+    await route.continue();
+  });
+  await page.reload({ waitUntil: "domcontentloaded" });
 
   await page.getByRole("button", { name: "Load Game" }).click();
   await expect(page.getByRole("heading", { name: "Load Game" })).toBeVisible();
@@ -29,9 +47,22 @@ test("a saved game is listed on the main menu and resumes where it was", async (
   expect(box.y).toBeGreaterThanOrEqual(0);
   expect(box.y + box.height).toBeLessThanOrEqual(size.height);
   expect(box.x + box.width).toBeLessThanOrEqual(size.width);
-  const row = page.locator("#saves-list li", { hasText: "E2E save" });
+  const row = page.locator(`#saves-list li[data-save="${saveId}"]`);
   await expect(row).toBeVisible();
-  await row.getByRole("button", { name: "Resume E2E save" }).click();
+  const resume = row.getByRole("button", { name: "Resume E2E save" });
+  try {
+    // Send a real pointer click while startup is held, bypassing Playwright's
+    // usual wait for an enabled button.
+    await resume.click({ force: true });
+    await expect(page.locator("#loading-error")).toBeHidden();
+    await expect(resume).toBeDisabled({ timeout: 2_000 });
+    await expect(page.locator("#saves-status")).toHaveText(
+      "Connecting to your world…",
+    );
+  } finally {
+    releaseClient();
+  }
+  await resume.click({ timeout: 60_000 });
   await expect(page.locator("#start-sequence")).toBeHidden({
     timeout: 120_000,
   });
@@ -47,6 +78,6 @@ test("a saved game is listed on the main menu and resumes where it was", async (
   await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("button", { name: "Quit to Main Menu" }).click();
   await page.getByRole("button", { name: "Load Game" }).click();
-  await page.getByRole("button", { name: "Delete E2E save" }).click();
+  await row.getByRole("button", { name: "Delete E2E save" }).click();
   await expect(row).toHaveCount(0);
 });
