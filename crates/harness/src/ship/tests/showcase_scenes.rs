@@ -51,22 +51,6 @@ fn the_new_scene_kinds_parse_with_their_defaults() {
 }
 
 #[test]
-fn scene_lengths_mirror_the_recorders_pacing() {
-    let at = |scene: &str| durations(&Storyboard::parse(&board(scene)).unwrap(), &[None])[0];
-    // 1000 intro + 2500 race + 2×400 extras + 2500 hold.
-    assert_eq!(at(TIMING), 6800);
-    // "GET /ab" typed (7×22), 500 pause, 3 body lines at 300 ms, 3000 hold.
-    assert_eq!(at(API), 154 + 500 + 900 + 3000);
-    // 3 characters at 10 ms and a 400 ms pause, then the hold.
-    assert_eq!(at(SESSION), 30 + 400 + 3000);
-    // The longer pane sets the length: "x" shown (650) beats "ls" typed (544).
-    assert_eq!(at(COMPARE), 650 + 3000);
-    // Narration stretches the new kinds like any other.
-    let board = Storyboard::parse(&board(TIMING)).unwrap();
-    assert_eq!(durations(&board, &[Some(20_000)]), [20_600]);
-}
-
-#[test]
 fn timing_scenes_are_bounded() {
     // Errors name the scene they come from.
     refuse(

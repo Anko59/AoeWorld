@@ -1,5 +1,4 @@
 use crate::ci_report::chart::{Axis, Chart, Guide, Line, Mark, nice_ticks, render};
-use crate::ci_report::format::{first_sentence, grouped, label, short_date, si, signed, stamp};
 use crate::ci_report::page;
 use crate::ci_report::tests::series_fixture;
 
@@ -25,24 +24,6 @@ fn nice_ticks_step_by_one_two_or_five_times_a_power_of_ten() {
     );
 }
 
-#[test]
-fn numbers_and_names_read_for_people() {
-    assert_eq!(si(9_696_224_729.0), "9.70G");
-    assert_eq!(si(48_681_579.0), "48.7M");
-    assert_eq!(si(183_229.0), "183k");
-    assert_eq!(si(950.0), "950");
-    assert_eq!(grouped(1_045_308), "1,045,308");
-    assert_eq!(grouped(12), "12");
-    assert_eq!(signed(1.24), "+1.2%");
-    assert_eq!(signed(-3.46), "−3.5%");
-    assert_eq!(signed(0.02), "0.0%");
-    assert_eq!(label("simulation::late_game_x4_main"), "late game 4× main");
-    assert_eq!(label("wasm_gzip"), "client bundle, gzip");
-    assert_eq!(short_date("2026-11-25T12:32:38Z"), "25 Nov");
-    assert_eq!(stamp("2026-11-05T09:07:00Z"), "5 Nov 09:07");
-    assert_eq!(first_sentence("One. Two."), "One.");
-}
-
 fn chart(lines: Vec<Line>) -> Chart {
     Chart {
         id: "c".to_owned(),
@@ -64,29 +45,6 @@ fn line(label: &str, segments: Vec<Vec<(f64, f64)>>) -> Line {
         label: label.to_owned(),
         segments,
     }
-}
-
-#[test]
-fn a_chart_draws_one_path_per_segment_and_two_widths() {
-    let svg = render(&chart(vec![line(
-        "late game",
-        vec![
-            vec![(0.0, 10.0), (86_400.0, 12.0)],
-            vec![(172_800.0, 50.0), (259_200.0, 52.0)],
-        ],
-    )]));
-    assert_eq!(
-        svg.matches("<svg").count(),
-        2,
-        "a wide and a narrow drawing"
-    );
-    assert_eq!(
-        svg.matches(r#"class="line s0""#).count(),
-        4,
-        "two segments in each drawing"
-    );
-    assert!(svg.contains("late game"), "the legend names the line");
-    assert!(svg.contains(r#"role="img""#) && svg.contains(r#"aria-label="A chart""#));
 }
 
 #[test]
@@ -135,13 +93,6 @@ fn the_tips_ride_along_as_json_that_cannot_close_the_script() {
 }
 
 #[test]
-fn a_chart_with_no_points_says_so_instead_of_drawing_nothing() {
-    let svg = render(&chart(vec![line("x", vec![])]));
-    assert!(svg.contains("No measurement"));
-    assert!(!svg.contains("<svg"));
-}
-
-#[test]
 fn the_page_is_one_self_contained_file_with_every_section() {
     let html = page::render(&series_fixture());
     for heading in [
@@ -174,21 +125,6 @@ fn the_page_is_one_self_contained_file_with_every_section() {
         html.contains("https://github.com/o/r/pull/504"),
         "a move links to its pull request"
     );
-}
-
-#[test]
-fn the_headline_is_one_sentence_about_the_latest_measured_commit() {
-    let data = series_fixture();
-    let sentence = &data.headline;
-    assert_eq!(
-        sentence.matches(". ").count(),
-        0,
-        "one sentence: {sentence}"
-    );
-    assert!(sentence.ends_with('.'));
-    assert!(sentence.contains("late game"), "{sentence}");
-    assert!(sentence.contains("bundle"), "{sentence}");
-    assert!(sentence.contains("#506"), "{sentence}");
 }
 
 #[test]

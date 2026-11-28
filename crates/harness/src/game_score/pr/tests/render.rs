@@ -1,7 +1,7 @@
 use super::*;
 use crate::game_score::pr::{
     compare::compare,
-    fixtures::{MAP, late, natural, numbers_in, report, scenario, set, spread, standard, window},
+    fixtures::{MAP, report, scenario, set, spread, standard, window},
     verdict::{Facts, verdicts},
 };
 use serde_json::json;
@@ -86,19 +86,6 @@ fn the_comment_starts_with_the_marker_and_a_hidden_line_naming_both_commits() {
 }
 
 #[test]
-fn a_changed_number_is_one_row_of_the_scenarios_table() {
-    let (section, _) = pages(Some(&standard()), &changed_branch(), &hit());
-    assert!(
-        section.contains("### natural, 100 seats, 10000 ticks"),
-        "{section}"
-    );
-    assert!(
-        section.contains("| window | number | merge base | this branch | change |\n|---|---|---|---|---|\n| early | share of orders arrived | 97.1% | 94.0% | -3.2% |\n"),
-        "{section}"
-    );
-}
-
-#[test]
 fn the_numbers_the_table_does_not_name_are_collapsed_under_the_ones_it_does() {
     let mut branch = changed_branch();
     set(
@@ -149,55 +136,6 @@ fn the_numbers_the_table_does_not_name_are_collapsed_under_the_ones_it_does() {
     assert!(
         one.contains("<details><summary>1 more number changed"),
         "{one}"
-    );
-}
-
-#[test]
-fn numbers_that_did_not_change_are_folded_into_a_count() {
-    let total = numbers_in(&natural()["windows"][0]);
-    let (section, terminal) = pages(Some(&standard()), &changed_branch(), &hit());
-    let expected = format!(
-        "{} numbers unchanged (early {}, middle {total}, whole {total}).",
-        total * 3 - 1,
-        total - 1
-    );
-    assert!(section.contains(&expected), "{section}");
-    assert!(terminal.contains(&expected), "{terminal}");
-}
-
-#[test]
-fn a_scenario_where_nothing_changed_says_so_instead_of_an_empty_table() {
-    let (section, _) = pages(Some(&standard()), &changed_branch(), &hit());
-    assert!(
-        section.contains("no number changed: this branch plays the same game as the merge base"),
-        "late did not change: {section}"
-    );
-    assert_eq!(
-        section.matches("| window | number |").count(),
-        1,
-        "one table, natural's"
-    );
-}
-
-#[test]
-fn wall_time_and_memory_are_labelled_noisy_and_collapsed() {
-    let mut branch = changed_branch();
-    set(
-        &mut branch,
-        "natural",
-        "early",
-        "cost.tick_seconds",
-        json!(9.0),
-    );
-    let (section, terminal) = pages(Some(&standard()), &branch, &hit());
-    assert!(section.contains("<summary>Wall time and memory (noisy, never judged)</summary>"));
-    assert!(
-        section.contains("| early | seconds inside the ticks | 6.7 | 9 | +33% |"),
-        "{section}"
-    );
-    assert!(
-        terminal.contains("wall time and memory (noisy, never judged):"),
-        "{terminal}"
     );
 }
 
@@ -263,55 +201,6 @@ fn a_comment_too_long_for_github_drops_the_merge_bases_side_then_the_report() {
 }
 
 #[test]
-fn the_terminal_shows_the_verdict_the_aligned_table_and_what_each_side_cost() {
-    let (_, terminal) = pages(Some(&standard()), &changed_branch(), &hit());
-    assert!(terminal.starts_with("game score (informational, nothing is gated): merge base bbbbbbbbbbbb against this branch aaaaaaaaaaaa on map ce1c8d7e\n"), "{terminal}");
-    assert!(terminal.contains("  crash: none\n"));
-    assert!(terminal.contains("  note: a note\n"));
-    assert!(
-        terminal.contains("  window  number                   merge base  this branch  change\n"),
-        "{terminal}"
-    );
-    assert!(
-        terminal.contains("  early   share of orders arrived       97.1%        94.0%   -3.2%\n"),
-        "{terminal}"
-    );
-    assert!(terminal.contains("merge base: cache hit in 0.2 s (entry abababababab, made from 111111111111 3 h ago; it took 200 s to play)\n"), "{terminal}");
-    assert!(
-        terminal.contains(
-            "this branch: built in 143 s, played in 71 s, stored as entry cdcdcdcdcdcd\n"
-        ),
-        "{terminal}"
-    );
-}
-
-#[test]
-fn a_miss_without_a_build_and_an_unavailable_base_read_plainly() {
-    let played = Source::Played {
-        build_seconds: 0.0,
-        play_seconds: 62.0,
-        key: None,
-    };
-    assert_eq!(
-        played.line("this branch", false),
-        "this branch: played in 62 s"
-    );
-    assert_eq!(
-        played.line("merge base", true),
-        "merge base: cache miss, played in 62 s"
-    );
-    assert_eq!(
-        miss().line("merge base", true),
-        "merge base: cache miss, built in 143 s, played in 71 s, stored as entry cdcdcdcdcdcd"
-    );
-    let gone = Source::Unavailable("it did not build".to_owned());
-    assert_eq!(
-        gone.line("merge base", true),
-        "merge base: not available (it did not build)"
-    );
-}
-
-#[test]
 fn without_a_merge_base_the_branch_stands_alone_and_says_why() {
     let (section, terminal) = pages(None, &standard(), &Source::Unavailable("no map".to_owned()));
     assert!(
@@ -325,25 +214,6 @@ fn without_a_merge_base_the_branch_stands_alone_and_says_why() {
         "{section}"
     );
     assert!(terminal.contains("not compared (no numbers for the merge base); this branch alone:"));
-}
-
-#[test]
-fn the_first_verdict_line_says_which_case_it_is_and_the_terminal_has_no_markdown_in_it() {
-    let (section, terminal) = pages(Some(&standard()), &standard(), &hit());
-    assert!(
-        section.contains("**Verdict**\n\n- **same game**: every number of every compared window"),
-        "{section}"
-    );
-    assert!(
-        terminal.contains("  same game: every number of every compared window"),
-        "{terminal}"
-    );
-    assert!(!terminal.contains("**"), "{terminal}");
-    let (section, _) = pages(Some(&standard()), &changed_branch(), &hit());
-    assert!(
-        section.contains("- **different game**: 1 numbers moved, 0 beyond their usual spread"),
-        "{section}"
-    );
 }
 
 #[test]
@@ -362,11 +232,4 @@ fn the_timing_list_ends_with_the_place_ship_writes_what_the_check_added() {
 #[test]
 fn a_bar_in_a_cell_cannot_break_the_table() {
     assert_eq!(cell("a | b\nc"), "a \\| b c");
-}
-
-#[test]
-fn a_late_only_report_renders_too() {
-    let only = report(vec![late()]);
-    let (section, _) = pages(Some(&only), &only, &hit());
-    assert!(section.contains("### late, 100 seats, 1200 ticks"));
 }

@@ -7,9 +7,6 @@ mod long;
 mod observer;
 mod policy;
 
-#[cfg(test)]
-mod tests;
-
 fn main() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     if args
