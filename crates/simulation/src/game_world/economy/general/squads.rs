@@ -394,18 +394,26 @@ impl GameWorld {
             return;
         };
         let resolve = |point| {
-            self.formation_goal(
-                player,
-                origin,
-                self.config.snap_ground_position(point),
-                aoe_core::Formation::Line,
-                ids,
-            )
+            let at = self.config.snap_ground_position(point);
+            let form = aoe_core::Formation::Line;
+            if attack_move
+                && let Ok((approach, breach)) =
+                    self.formation_leg(player, origin, at, form, ids, true)
+            {
+                // Preserve the destination behind the wall. The formation
+                // will stage its approach and keep the march's final marker.
+                return Ok(if breach.is_some() { at } else { approach });
+            }
+            self.formation_goal(player, origin, at, form, ids)
         };
         let Ok(goal) = resolve(desired) else {
             return;
         };
-        let Ok(finish) = resolve(finish) else {
+        let Ok(finish) = (if desired == finish {
+            Ok(goal)
+        } else {
+            resolve(finish)
+        }) else {
             return;
         };
         let retained =

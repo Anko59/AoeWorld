@@ -84,11 +84,14 @@ impl GameWorld {
                     radius: i64::from(sight) * i64::from(FIXED_SUBUNITS_PER_TILE),
                 })
             });
-        let breach = group.breach.and_then(|id| {
-            let b = self.building(id)?;
-            self.building_visible_to(player, b.footprint)
-                .then_some((id, Goal::Building(b.footprint)))
-        });
+        let breach = group
+            .breach
+            .filter(|&id| self.breach_still_blocks(player, id))
+            .and_then(|id| {
+                let b = self.building(id)?;
+                self.building_visible_to(player, b.footprint)
+                    .then_some((id, Goal::Building(b.footprint)))
+            });
         let lookers: Vec<_> = group
             .members
             .iter()

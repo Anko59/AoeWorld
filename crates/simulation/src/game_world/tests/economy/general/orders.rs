@@ -68,6 +68,41 @@ fn general_only_move_ends_with_the_next_army_order() {
 }
 
 #[test]
+fn a_general_attack_move_can_target_a_wall_and_march_the_roster_past_it() {
+    let (mut w, _) = setup();
+    w.set_fog_disabled(true);
+    let (ids, g) = muster(&mut w);
+    let wall = w
+        .insert_building(
+            PlayerId(1),
+            BuildingKind::PalisadeWall,
+            aoe_core::TileRect::from_xywh(108, 104, 1, 1),
+            true,
+        )
+        .unwrap();
+    w.economy.buildings.get_mut(&wall).unwrap().hp = 12;
+    for (goal, queued) in [(at(108, 104), false), (at(125, 104), true)] {
+        w.issue_player_formation_move(
+            PlayerId(0),
+            &[g],
+            aoe_core::Formation::Line,
+            goal,
+            queued,
+            true,
+        )
+        .unwrap();
+    }
+    advance(&mut w, 1_200);
+    assert!(w.building(wall).is_none());
+    assert!(w.unit(g).unwrap().position.x > at(120, 104).x);
+    assert!(
+        ids.iter()
+            .any(|&id| w.unit(id).unwrap().position.x > at(120, 104).x),
+        "the army did not follow the queued waypoint"
+    );
+}
+
+#[test]
 fn solo_hold_ignores_visible_threats_until_march_or_stop() {
     for threat in ["soldier", "overwhelming", "building", "wounded"] {
         for resume_with_stop in [false, true] {

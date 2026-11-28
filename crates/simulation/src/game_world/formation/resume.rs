@@ -78,7 +78,7 @@ impl GameWorld {
             // An enemy whose every melee spot is taken is not a fight to
             // stand and wait for: the member marches on, as the group does.
             if let Some(target) = self
-                .probe_for_target(id)
+                .probe_for_resume_target(id)
                 .filter(|&target| self.attack_spot_free(id, target))
             {
                 self.begin_autonomous_attack(id, target, unit.position);

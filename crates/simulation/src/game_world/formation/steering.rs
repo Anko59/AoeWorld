@@ -119,8 +119,11 @@ impl GameWorld {
                 group.anchor = group.destination;
                 group.progress = group.path.end();
             }
-            if self.units[self.lookup[&leader]].order.is_none()
-                && group.breach.is_none_or(|id| self.building(id).is_none())
+            let carrier = &self.units[self.lookup[&leader]];
+            if carrier.order.is_none()
+                && group
+                    .breach
+                    .is_none_or(|id| !self.breach_still_blocks(carrier.state.player, id))
             {
                 // A member on a detour or still short of its give-up is not done:
                 // settling would stop the rejoin and retries that finish it.

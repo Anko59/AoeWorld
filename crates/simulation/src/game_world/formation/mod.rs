@@ -128,7 +128,7 @@ pub(crate) struct Group {
     queue: VecDeque<MovementWaypoint>,
     marker: MovementWaypoint,
     attack_move: bool,
-    /// A hostile obstacle at the current reachable frontier.
+    /// The hostile obstacle this leg is approaching on the way to the marker.
     breach: Option<EntityId>,
     path: path::Path,
     /// Route end when the anchor corridor was last straightened.
@@ -184,7 +184,9 @@ impl GameWorld {
         };
         self.formations.get(&leader).is_some_and(|group| {
             group.attack_move == attack_move
-                && (if attack_move {
+                && (if group.breach.is_some() {
+                    group.marker.position == goal
+                } else if attack_move {
                     group.destination == goal
                 } else {
                     near_goal(group.destination, goal)

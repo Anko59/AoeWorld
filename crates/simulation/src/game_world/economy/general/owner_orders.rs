@@ -41,12 +41,25 @@ impl GameWorld {
         id: EntityId,
         destination: WorldPosition,
         attack_move: bool,
-    ) -> Result<(), GameWorldError> {
+    ) -> Result<(), EconomyError> {
         let prior = &self.economy.generals.armies[&id];
         let changed =
             prior.destination != Some(destination) || prior.owner_march != Some(attack_move);
         if changed {
-            self.issue_move(id, destination)?;
+            if attack_move {
+                let player = self.unit(id).ok_or(GameWorldError::UnknownEntity)?.player;
+                self.issue_formation_move(
+                    player,
+                    &[id],
+                    aoe_core::Formation::Line,
+                    destination,
+                    false,
+                    true,
+                )?;
+                self.cancel_transport_journey(id);
+            } else {
+                self.issue_move(id, destination)?;
+            }
             self.move_queues.remove(&id);
             self.restore_general_stances(id);
             let army = self
