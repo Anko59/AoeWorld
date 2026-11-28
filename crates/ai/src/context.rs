@@ -215,6 +215,7 @@ impl<'a> Context<'a> {
         };
         let army_ids: BTreeSet<u32> = army.iter().filter(|u| u.alive).map(|u| u.id).collect();
         board.marched.retain(|i, _| army_ids.contains(i));
+        board.march_sent.retain(|i, _| army_ids.contains(i));
         board.land_failures.retain(|_, until| *until > tick);
         Self {
             world,

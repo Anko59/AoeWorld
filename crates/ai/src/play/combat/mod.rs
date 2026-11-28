@@ -241,6 +241,7 @@ impl CombatManager {
                 let mem = &mut *ctx.board;
                 mem.march_progress.remove(&unit.id);
                 mem.marched.remove(&unit.id);
+                mem.march_sent.remove(&unit.id);
                 mem.cool(&format!("march-alone:{}", unit.id), ctx.tick, 2 * stall);
                 mem.march_goal = None;
                 mem.bump("marches_recovered");

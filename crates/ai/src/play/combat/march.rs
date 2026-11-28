@@ -126,6 +126,16 @@ pub fn march(
             }
             continue;
         }
+        // Soldiers idle on the tile the same hop already left them on gain
+        // nothing from it again: the server accepted it and they did not
+        // move. Repeating it was a third of the formation orders (#978).
+        let sent = &ctx.board.march_sent;
+        if soldiers
+            .iter()
+            .all(|u| sent.get(&u.id) == Some(&(u.tile(), target)))
+        {
+            continue;
+        }
         let marched = &ctx.board.marched;
         soldiers.sort_by_key(|u| (marched.get(&u.id).map_or(-pause, |t| *t as i64), u.id));
         for members in soldiers.chunks(config.march_group_members) {
@@ -142,6 +152,7 @@ pub fn march(
             ctx.order_or_stop("formation_move", order)?;
             for unit in members {
                 ctx.board.marched.insert(unit.id, ctx.tick);
+                ctx.board.march_sent.insert(unit.id, (unit.tile(), target));
                 ctx.board
                     .march_progress
                     .insert(unit.id, (unit.tile(), ctx.tick));

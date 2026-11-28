@@ -100,6 +100,8 @@ impl CombatManager {
             mem.cool(&format!("target:{}", building.id), ctx.tick, wait);
             mem.attack_target = None;
             mem.march_goal = None;
+            // The retry after the wait is a fresh attempt from where they stand.
+            mem.march_sent.clear();
             mem.bump("targets_unreachable");
             return Ok(());
         }
