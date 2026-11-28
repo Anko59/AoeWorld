@@ -70,6 +70,7 @@ impl GameWorld {
         ids: &[EntityId],
         attack_move: bool,
     ) -> Result<(WorldPosition, Option<EntityId>), EconomyError> {
+        let mut known = None;
         if attack_move && self.has_route_navigation() {
             let bucket = self.formation_bucket(ids);
             let from = origin.tile_floor();
@@ -77,7 +78,9 @@ impl GameWorld {
             if self.land_reachable(player, bucket, from, target)? {
                 return Ok((requested, None));
             }
-            if let Some(frontier) = self.land_frontier(player, bucket, from, target)?
+            let found = self.land_frontier(player, bucket, from, target)?;
+            known = Some(found);
+            if let Some(frontier) = found
                 && let Some(blocker) = self.frontier_blocker(player, frontier, target)
                 && ids.iter().any(|id| {
                     self.unit(*id)
@@ -94,7 +97,7 @@ impl GameWorld {
         if !self.route_tile_admitted(player, requested.tile_floor()) {
             return Err(GameWorldError::InvalidPosition.into());
         }
-        self.formation_goal(player, origin, requested, form, ids)
+        self.formation_goal_from(player, origin, requested, form, ids, known)
             .map(|goal| (goal, None))
     }
 
