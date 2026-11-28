@@ -28,6 +28,9 @@ impl View for World {
     fn economy(&self) -> Option<Economy> {
         World::economy(self).map(Economy::from)
     }
+    fn diplomacy(&self) -> Option<&aoe_sdk::DiplomacyView> {
+        World::diplomacy(self)
+    }
     fn relics(&self) -> Option<&aoe_sdk::RelicView> {
         World::relics(self)
     }

@@ -6,6 +6,8 @@ use serde::{
 use std::{fmt, marker::PhantomData};
 
 mod automation;
+mod diplomacy;
+pub use diplomacy::*;
 mod garrison;
 #[cfg(feature = "server-repair")]
 mod sanitize;
@@ -37,7 +39,7 @@ pub use projectiles::{ProjectileKind, ProjectileState};
 pub use resources::{MAX_RESOURCE_CACHE, MAX_RESOURCE_CHANGES, ResourceAmount, ResourceState};
 pub use wildlife::*;
 
-pub const VERSION: u16 = 33;
+pub const VERSION: u16 = 34;
 pub const MAX_OFFICE_ZONE_CHUNKS: usize = 64;
 /// Coordinates in 32-tile chunks, then one row of x bits per local y.
 pub type OfficeZoneChunk = (TileCoord, [u32; 32]);
@@ -346,6 +348,7 @@ pub enum ServerMessage {
         code: u16,
     },
     Relics(RelicView),
+    Diplomacy(DiplomacyView),
 }
 
 impl ServerMessage {

@@ -60,6 +60,7 @@ pub(super) struct SessionBuild {
     pub fog: Option<(FogState, u64)>,
     pub animals: Vec<AnimalState>,
     pub relics: Option<aoe_protocol::RelicView>,
+    pub diplomacy: Option<Option<aoe_protocol::DiplomacyView>>,
     pub projectiles: Vec<ProjectileState>,
     pub move_queues: Vec<aoe_protocol::MoveQueue>,
     pub office_zones: super::deliver::OfficeZones,
@@ -234,6 +235,7 @@ fn build_session(
             region,
             view.viewer,
         ),
+        diplomacy: None,
         relics: super::relics::view(
             world,
             view.viewer,
@@ -299,6 +301,7 @@ fn destinations(
 /// there is work for.
 pub(super) fn build(
     world: &GameWorld,
+    slots: &[super::Slot],
     views: &[View],
     changes: &BTreeMap<PlayerId, BTreeSet<EntityId>>,
     (previous, generation): (Option<Arc<UnitFrame>>, u64),
@@ -335,8 +338,23 @@ pub(super) fn build(
         workers.lock().unwrap().push(std::thread::current().id());
         (Scratch::default(), Vec::new())
     };
+    let diplomacy_due = slots.len() > 1
+        && world
+            .tick()
+            .0
+            .is_multiple_of(u64::from((world.config().tick_hz / 4).max(1)));
     let one = |scratch: &mut (Scratch, Vec<u32>), view: &View| {
-        build_session(world, &frame, &viewers, view, &nearby, scratch)
+        let mut built = build_session(world, &frame, &viewers, view, &nearby, scratch)?;
+        if diplomacy_due {
+            built.diplomacy = Some(super::diplomacy::view(
+                world,
+                slots,
+                view.viewer,
+                view.subscription.revision,
+                view.ai,
+            ));
+        }
+        Some(built)
     };
     // Sessions differ widely in cost (a crowded camera against an idle AI),
     // so they are stolen a few at a time rather than split into fixed parts.

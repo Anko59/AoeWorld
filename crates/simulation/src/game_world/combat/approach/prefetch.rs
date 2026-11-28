@@ -56,7 +56,11 @@ impl GameWorld {
         if unit.hp == 0 || now < attacker.repath_tick || self.waiting_for_route(index) {
             return None;
         }
-        let goal = self.attack_goal(attacker.target, unit.player)?;
+        let goal = self.attack_order_goal(
+            attacker.target,
+            unit.player,
+            attacker.origin.is_some() || attacker.resume.is_some(),
+        )?;
         let stats = self.unit_state_stats(&unit);
         let range = crate::game_world::navy::attack_range(&stats);
         let distance = goal.distance_squared(unit.position);

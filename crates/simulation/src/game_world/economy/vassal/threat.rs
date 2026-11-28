@@ -26,12 +26,16 @@ impl GameWorld {
         })
         .filter_map(|hit| {
             if let Some(u) = self.unit(hit.attacker).filter(|u| {
-                u.player != d.player && u.hp > 0 && self.unit_visible_to(d.player, u.id)
+                self.is_enemy(d.player, u.player)
+                    && u.hp > 0
+                    && self.unit_visible_to(d.player, u.id)
             }) {
                 return Some((u.id, u.position));
             }
             let b = self.building(hit.attacker).filter(|b| {
-                b.player != d.player && b.hp > 0 && self.building_visible_to(d.player, b.footprint)
+                self.is_enemy(d.player, b.player)
+                    && b.hp > 0
+                    && self.building_visible_to(d.player, b.footprint)
             })?;
             // An ordinary march needs a walkable destination, not the
             // blocked centre of the attacking building.

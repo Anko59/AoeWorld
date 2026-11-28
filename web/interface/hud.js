@@ -9,6 +9,7 @@ import { updateDetails } from '/interface/details.js';
 import { initPause } from '/interface/pause.js';
 import { initSaveGame } from '/interface/saves.js';
 import { initRelics } from '/interface/relics/panel.js';
+import { initDiplomacy } from '/interface/diplomacy/panel.js';
 import { initActivity } from '/interface/activity/panel.js';
 // Original interface artwork and DOM presentation. Authoritative values arrive
 // from Rust at most four times per second; no frame loop or gameplay rules here.
@@ -20,6 +21,7 @@ export function initInterface() {
   initBuildings();
   initActivity();
   initRelics();
+  initDiplomacy();
   initSteward();
   initVassal();
   initGeneralPanel();

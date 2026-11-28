@@ -7,6 +7,8 @@ pub(super) mod automation;
 pub(super) mod building_panel;
 pub(super) mod commerce;
 pub(super) mod construction;
+#[path = "diplomacy/mod.rs"]
+pub(super) mod diplomacy;
 pub(super) mod garrison;
 pub(super) mod hud;
 pub(super) mod navy;
@@ -60,6 +62,7 @@ pub(crate) struct Village {
     pub wall_start: Option<aoe_core::TileCoord>,
     pub rubble: Vec<(GameplayBuildingState, u64)>,
     pub relics: Option<aoe_protocol::RelicView>,
+    diplomacy: diplomacy::Diplomacy,
     pub animals: Vec<aoe_protocol::AnimalState>,
     /// Every boar the server told of, and what his villagers hunted: the
     /// animals are told near the camera only. No id is used twice.

@@ -79,10 +79,26 @@ impl TargetArea {
 }
 
 impl GameWorld {
-    /// A live unit or building of another player, else `None`.
+    /// Direct orders may target neutrals, while automatic orders need enemies.
     pub(crate) fn attack_goal(&self, target: EntityId, attacker: PlayerId) -> Option<Goal> {
+        self.attack_order_goal(target, attacker, false)
+    }
+
+    pub(crate) fn attack_order_goal(
+        &self,
+        target: EntityId,
+        attacker: PlayerId,
+        autonomous: bool,
+    ) -> Option<Goal> {
+        let targetable = |owner| {
+            if autonomous {
+                self.is_enemy(attacker, owner)
+            } else {
+                owner != attacker && !self.allied_seats(attacker, owner)
+            }
+        };
         if let Some(unit) = self.unit(target) {
-            return (unit.hp > 0 && unit.player != attacker && !self.embarked(target))
+            return (unit.hp > 0 && targetable(unit.player) && !self.embarked(target))
                 .then_some(Goal::Unit(unit.position, unit.kind.collision_radius()));
         }
         if let Some(animal) = self.animal(target) {
@@ -91,7 +107,7 @@ impl GameWorld {
         self.economy
             .buildings
             .get(&target)
-            .filter(|b| b.hp > 0 && b.player != attacker && !b.is_unstarted())
+            .filter(|b| b.hp > 0 && targetable(b.player) && !b.is_unstarted())
             .map(|building| Goal::Building(building.footprint))
     }
 
@@ -118,7 +134,7 @@ impl GameWorld {
                     scanned += 1;
                     let u = self.units[self.collisions.unit_index(id)].state;
                     let goal = Goal::Unit(u.position, u.kind.collision_radius());
-                    if u.player == area.player
+                    if !self.is_enemy(area.player, u.player)
                         || u.hp == 0
                         || self.embarked(id)
                         || !area.accepts(goal)
@@ -160,7 +176,7 @@ impl GameWorld {
             {
                 let chunk = ChunkCoord { x, y };
                 // The presence summary proves a chunk of only own units.
-                if !self.chunks.presence.others(chunk, area.player) {
+                if !self.enemies_present(&self.chunks.presence, chunk, area.player) {
                     continue;
                 }
                 result.sampled_hostile = true;
@@ -173,7 +189,7 @@ impl GameWorld {
                             .lookup
                             .get(&c.id)
                             .map(|&at| &world.units[at].state)
-                            .is_some_and(|u| u.hp > 0 && u.player != area.player)
+                            .is_some_and(|u| u.hp > 0 && world.is_enemy(area.player, u.player))
                         || !world.unit_visible_to(area.player, c.id)
                     {
                         return;
@@ -224,7 +240,7 @@ impl GameWorld {
                 seen.push(id);
                 let Some(b) = self
                     .building(id)
-                    .filter(|b| b.player != area.player && b.hp > 0)
+                    .filter(|b| b.hp > 0 && self.is_enemy(area.player, b.player))
                 else {
                     continue;
                 };

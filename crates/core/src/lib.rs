@@ -5,7 +5,7 @@ mod clamp;
 mod combat;
 mod coordinates;
 mod tile_line;
-pub use combat::CombatStance;
+pub use combat::{CombatStance, DiplomaticStance};
 mod formation;
 pub use formation::{Formation, MAX_FORMATION_MEMBERS};
 mod projection;

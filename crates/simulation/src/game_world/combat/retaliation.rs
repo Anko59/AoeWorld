@@ -25,7 +25,7 @@ impl GameWorld {
         {
             return;
         }
-        let Some(goal) = self.attack_goal(attacker, unit.player) else {
+        let Some(goal) = self.attack_order_goal(attacker, unit.player, true) else {
             return;
         };
         let stats = self

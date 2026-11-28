@@ -27,10 +27,10 @@ pub(crate) struct ChunkContacts {
     cells: Vec<(PlayerId, u16)>,
 }
 
-fn others(masks: &[(PlayerId, u16)], viewer: PlayerId) -> u16 {
+fn enemy_cells(world: &GameWorld, masks: &[(PlayerId, u16)], viewer: PlayerId) -> u16 {
     masks
         .iter()
-        .filter(|(p, _)| *p != viewer)
+        .filter(|(p, _)| world.is_enemy(viewer, *p))
         .fold(0, |all, (_, bits)| all | bits)
 }
 
@@ -38,13 +38,6 @@ fn mark(masks: &mut Vec<(PlayerId, u16)>, player: PlayerId, bits: u16) {
     match masks.iter_mut().find(|(p, _)| *p == player) {
         Some((_, old)) => *old |= bits,
         None => masks.push((player, bits)),
-    }
-}
-
-impl ChunkContacts {
-    /// Cells holding a unit of a player other than `viewer`.
-    pub(crate) fn enemy_cells(&self, viewer: PlayerId) -> u16 {
-        others(&self.cells, viewer)
     }
 }
 
@@ -118,7 +111,7 @@ impl GameWorld {
                 let Some(u) = world.lookup.get(&id).map(|&at| &world.units[at].state) else {
                     continue;
                 };
-                if u.player != viewer
+                if world.is_enemy(viewer, u.player)
                     && u.hp > 0
                     && cell_bit(chunk, u.position.tile_floor()) & mask != 0
                     && !world.embarked(id)
@@ -129,10 +122,14 @@ impl GameWorld {
             return;
         }
         let contacts = self.chunk_contacts(chunk);
-        if contacts.enemy_cells(viewer) & mask == 0 {
+        if enemy_cells(self, &contacts.cells, viewer) & mask == 0 {
             return;
         }
-        for c in contacts.units.iter().filter(|c| c.player != viewer) {
+        for c in contacts
+            .units
+            .iter()
+            .filter(|c| self.is_enemy(viewer, c.player))
+        {
             f(self, c);
         }
     }
@@ -167,14 +164,14 @@ impl GameWorld {
         for y in bounds.min.y.div_euclid(size)..=(bounds.max.y - 1).div_euclid(size) {
             for x in bounds.min.x.div_euclid(size)..=(bounds.max.x - 1).div_euclid(size) {
                 let chunk = ChunkCoord { x, y };
-                if !self.vision.building_chunks.others(chunk, player) {
+                if !self.enemies_present(&self.vision.building_chunks, chunk, player) {
                     continue;
                 }
                 if !self.combat.contacts.buildings.contains_key(&chunk) {
                     let cells = self.read_building_cells(chunk);
                     self.combat.contacts.buildings.insert(chunk, cells);
                 }
-                if others(&self.combat.contacts.buildings[&chunk], player)
+                if enemy_cells(self, &self.combat.contacts.buildings[&chunk], player)
                     & cell_mask(chunk, bounds)
                     != 0
                 {

@@ -269,4 +269,5 @@ fn selection_orders_have_current_wire_and_bounded_unique_ids() {
     }
 }
 
+mod diplomacy;
 mod relics;

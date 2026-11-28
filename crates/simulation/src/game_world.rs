@@ -17,6 +17,8 @@ mod changes;
 #[path = "terrain/clearance.rs"]
 mod clearance;
 mod combat;
+#[path = "game_world/diplomacy/mod.rs"]
+mod diplomacy;
 mod economy;
 mod facing;
 #[path = "game_world/formation/mod.rs"]
@@ -165,6 +167,7 @@ pub struct GameWorld {
     pub(crate) next_entity_id: u64,
     pub(crate) economy: economy::Economy,
     pub(crate) combat: combat::Combat,
+    pub(crate) diplomacy: diplomacy::Diplomacy,
     pub(crate) wildlife: wildlife::Wildlife,
     pub(crate) relics: relics::Relics,
     pub(crate) vision: visibility::Vision,
@@ -235,6 +238,7 @@ impl GameWorld {
             next_entity_id: 0,
             economy: economy::Economy::default(),
             combat: Default::default(),
+            diplomacy: Default::default(),
             wildlife: Default::default(),
             relics: Default::default(),
             vision: Default::default(),

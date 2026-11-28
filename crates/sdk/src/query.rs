@@ -10,6 +10,18 @@ use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
 
 impl World {
     /// Relics and Monasteries the current subscription can see.
+    pub fn diplomacy(&self) -> Option<&aoe_protocol::DiplomacyView> {
+        // Diplomacy is match-wide. Changing the camera does not reset a stance.
+        self.diplomacy.as_ref()
+    }
+
+    fn hostile(&self, player: PlayerId) -> bool {
+        Some(player) != self.me
+            && self
+                .diplomacy()
+                .is_none_or(|view| view.stance(player) == aoe_protocol::DiplomaticStance::Enemy)
+    }
+
     pub fn relics(&self) -> Option<&aoe_protocol::RelicView> {
         self.relics
             .as_ref()
@@ -71,12 +83,13 @@ impl World {
         self.my_units(kind).into_iter().filter(Unit::idle).collect()
     }
 
-    /// Foreign units visible right now (the server sends no others).
+    /// Hostile units visible right now.
     pub fn visible_enemies(&self) -> Vec<Unit> {
         self.units
             .values()
+            .filter(|state| self.hostile(state.player))
             .map(|state| self.wrap_unit(*state))
-            .filter(|unit| !unit.mine && unit.alive())
+            .filter(Unit::alive)
             .collect()
     }
 
@@ -116,11 +129,11 @@ impl World {
             .collect()
     }
 
-    /// Foreign buildings the slot has seen (fog memory, possibly stale).
+    /// Hostile buildings the slot has seen (fog memory, possibly stale).
     pub fn known_enemy_buildings(&self) -> Vec<Building> {
         self.buildings
             .values()
-            .filter(|b| Some(b.player) != self.me)
+            .filter(|b| self.hostile(b.player))
             .map(|b| self.wrap_building(b))
             .collect()
     }

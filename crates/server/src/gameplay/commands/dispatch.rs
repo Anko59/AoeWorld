@@ -14,12 +14,15 @@ impl GameplayService {
     ) -> Option<GameplayServerMessage> {
         let service = self;
         match message {
+            GameplayClientMessage::DiplomacyOrder { .. }
+            | GameplayClientMessage::TributeOrder { .. } => {
+                super::diplomacy::dispatch(service, session_id, message).await
+            }
             GameplayClientMessage::RelicOrder { sequence, action } => {
                 service
                     .queue_command(session_id, sequence, super::PendingAction::Relic(action))
                     .await
             }
-
             GameplayClientMessage::StanceOrder {
                 sequence,
                 unit_ids,

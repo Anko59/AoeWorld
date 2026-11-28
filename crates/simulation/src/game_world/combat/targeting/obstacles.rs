@@ -22,7 +22,7 @@ impl GameWorld {
                     .building_at_tile(tile)
                     .and_then(|id| self.building(id))
                     .is_some_and(|b| {
-                        b.player != sight.player
+                        self.is_enemy(sight.player, b.player)
                             && b.hp > 0
                             && !b.kind.is_obstacle_target()
                             && b.kind != BuildingKind::Bridge
@@ -41,7 +41,7 @@ impl GameWorld {
                 ..=(bounds.max.x - 1).div_euclid(SPATIAL_CHUNK_TILES)
             {
                 let chunk = ChunkCoord { x, y };
-                if !self.chunks.presence.others(chunk, sight.player) {
+                if !self.enemies_present(&self.chunks.presence, chunk, sight.player) {
                     continue;
                 }
                 let mut found = false;
@@ -49,9 +49,9 @@ impl GameWorld {
                     found = found
                         || ((!sight.ram || c.siege)
                             && sight.accepts(Goal::Unit(c.position, c.radius))
-                            && world
-                                .unit(c.id)
-                                .is_some_and(|u| u.player != sight.player && u.hp > 0)
+                            && world.unit(c.id).is_some_and(|u| {
+                                world.is_enemy(sight.player, u.player) && u.hp > 0
+                            })
                             && world.unit_visible_to(sight.player, c.id));
                 });
                 if found {

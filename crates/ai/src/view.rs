@@ -305,6 +305,7 @@ pub trait View {
     fn town_center(&self) -> Option<Building>;
     fn animals(&self) -> Vec<Animal>;
     fn relics(&self) -> Option<&aoe_sdk::RelicView>;
+    fn diplomacy(&self) -> Option<&aoe_sdk::DiplomacyView>;
     fn resources(&self, kind: ResourceKind) -> Vec<Node>;
     fn visibility(&self, tile: Tile) -> Visibility;
     fn passable(&self, tile: Tile) -> Option<bool>;

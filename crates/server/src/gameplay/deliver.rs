@@ -347,6 +347,15 @@ fn deliver_session(
             return (applied, failed);
         }
     }
+    if let Some(view) = &build.diplomacy
+        && let Some(message) = super::diplomacy::message(session, build.revision, view.as_ref())
+    {
+        if send(session, message, &mut failed, id) {
+            session.resident_diplomacy.clone_from(view);
+        } else {
+            return (applied, failed);
+        }
+    }
     if session.resident_relics != build.relics {
         let view = build.relics.clone().unwrap_or(aoe_protocol::RelicView {
             revision: build.revision,

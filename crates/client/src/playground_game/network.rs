@@ -377,6 +377,9 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     client.rendered_frame.invalidate();
                 }
             }
+            Ok(GameplayServerMessage::Diplomacy(view)) if view.revision == client.revision => {
+                village::diplomacy::sync(&mut client, view);
+            }
             Ok(GameplayServerMessage::Relics(view)) if view.revision == client.revision => {
                 village::relics::sync(&mut client, view);
             }
@@ -434,6 +437,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             }) => {
                 village::construction::strategic::acknowledge(&mut client, sequence, result);
                 village::production::here::acknowledge(&mut client, sequence, result);
+                village::diplomacy::acknowledge(&mut client, sequence, result);
                 let observed = client.village.tick;
                 client.village.pending_training.acknowledge(
                     sequence,

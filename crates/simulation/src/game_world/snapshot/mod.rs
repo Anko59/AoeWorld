@@ -137,6 +137,14 @@ impl GameWorld {
             fog_disabled: self.fog_disabled(),
             hp_quarters: self.combat.hp_quarters.clone(),
             players: self.economy.players.values().copied().collect(),
+            stances: self.diplomacy.records().collect(),
+            alliance_offers: self.diplomacy.offers.iter().copied().collect(),
+            last_hostile_ticks: self
+                .diplomacy
+                .last_hostile_ticks
+                .iter()
+                .map(|(&pair, &tick)| (pair, tick))
+                .collect(),
             market_recovery: self.economy.market_recovery.snapshot(self.tick.0),
             resources,
             buildings,
@@ -209,6 +217,11 @@ impl GameWorld {
         for player in &snapshot.players {
             self.economy.players.insert(player.player, *player);
         }
+        self.diplomacy.restore(&snapshot.stances);
+        self.diplomacy
+            .offers
+            .extend(snapshot.alliance_offers.iter().copied());
+        self.diplomacy.last_hostile_ticks = snapshot.last_hostile_ticks.iter().copied().collect();
         self.tick = aoe_core::Tick(snapshot.tick);
         self.economy
             .market_recovery

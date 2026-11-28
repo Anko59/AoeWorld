@@ -69,8 +69,34 @@ impl Brain {
         if ctx.economy.is_none() {
             return;
         }
+        accept_alliances(&mut ctx);
         run_managers(&mut ctx);
         ctx.board.bump("decisions");
+    }
+}
+
+/// The view carries only proposals still eligible to accept.
+fn accept_alliances(ctx: &mut Context<'_>) {
+    let Some(view) = ctx.world.diplomacy() else {
+        return;
+    };
+    for offer in view
+        .seats
+        .iter()
+        .filter(|seat| seat.offer == aoe_sdk::AllianceOffer::Received)
+    {
+        if ctx
+            .order(
+                "accept_alliance",
+                Order::Diplomacy {
+                    player: offer.player,
+                    stance: aoe_sdk::DiplomaticStance::Ally,
+                },
+            )
+            .is_none()
+        {
+            break;
+        }
     }
 }
 

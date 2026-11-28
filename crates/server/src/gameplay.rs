@@ -17,6 +17,8 @@ mod commands;
 pub(crate) use commands::SelectionMove;
 #[path = "gameplay/deliver.rs"]
 mod deliver;
+#[path = "gameplay/diplomacy/mod.rs"]
+mod diplomacy;
 #[path = "gameplay/economy.rs"]
 mod economy;
 #[path = "gameplay/fanout.rs"]
@@ -293,6 +295,11 @@ impl GameplayService {
         let holding_message = economy::holdings::message(&land, revision, world.tick());
         session.resident_land = Some(land);
         let mut initial = vec![snapshot, wildlife, fog, projectile_message, holding_message];
+        session.resident_diplomacy =
+            diplomacy::view(&world, &self.slots, player, revision, session.ai);
+        if let Some(view) = session.resident_diplomacy.clone() {
+            initial.push(GameplayServerMessage::Diplomacy(view));
+        }
         if let Some(view) = session.resident_relics.clone() {
             initial.push(GameplayServerMessage::Relics(view));
         } else if had_relics {

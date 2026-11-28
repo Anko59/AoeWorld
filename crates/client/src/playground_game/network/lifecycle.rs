@@ -57,6 +57,7 @@ pub(super) fn clear_world(client: &mut Client) {
     }
     client.units.clear();
     client.village = Default::default();
+    village::diplomacy::clear();
     client.selected = Default::default();
     let tick_hz = client.config.tick_hz;
     client.presentation.reset(tick_hz);

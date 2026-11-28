@@ -1,0 +1,54 @@
+#diplomacy-panel {
+  color: #f7e8c3;
+  background: #201910 var(--ui-menu-image, none) center / cover;
+  border: 2px solid #a48149;
+  padding: 22px;
+  width: min(520px, 92vw);
+  box-shadow: 0 12px 48px #000b;
+}
+#diplomacy-panel::backdrop { background: #120e08aa; }
+#diplomacy-panel header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+#diplomacy-panel h2 { margin: 0; color: #ffedb8; font: 700 26px Georgia, serif; }
+#diplomacy-panel button, #diplomacy-panel select, #diplomacy-panel input {
+  border: 1px solid #9e8052;
+  background: #322719;
+  color: #fff1d1;
+  border-radius: 2px;
+  font: inherit;
+  min-height: 32px;
+  padding: 4px 8px;
+}
+#diplomacy-panel button:not(:disabled) { cursor: pointer; }
+#diplomacy-panel button:disabled { opacity: .5; }
+#diplomacy-panel .diplomacy-table { margin: 14px 0; max-height: 48vh; overflow: auto; }
+#diplomacy-panel table { border-collapse: collapse; width: 100%; }
+#diplomacy-panel :is(td, th) { text-align: left; padding: 7px 6px; border-bottom: 1px solid #c39d594a; }
+#diplomacy-panel td small { display: block; padding-top: 4px; }
+#diplomacy-panel footer { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+#tribute-amount { width: 86px; }
+#tribute-resource-icon .icon { width: 25px; height: 25px; vertical-align: middle; }
+#tribute-fee { color: #e5c888; }
+#diplomacy-result { margin: 10px 0 0; min-height: 1.25em; }
+.diplomacy-name::before {
+  content: "";
+  display: inline-block;
+  width: .62em;
+  height: .62em;
+  background: var(--seat-colour);
+  border: 1px solid #fff7cd;
+  margin-right: .55em;
+}
+#scoreboard {
+  position: absolute;
+  right: 12px;
+  top: 65px;
+  padding: 5px 8px;
+  line-height: 1.5;
+  color: #f7e8c3;
+  background: #21190fe8;
+  border: 1px solid #9e8052;
+  max-width: 30vw;
+}
+#scoreboard summary { cursor: pointer; }
+#scoreboard-players { list-style: none; margin: 5px 0 0; padding: 0; max-height: 35vh; overflow: auto; }
+#minimap-allied-markets { fill: #b3ffdf; stroke: #163c2d; stroke-width: .75; pointer-events: none; }

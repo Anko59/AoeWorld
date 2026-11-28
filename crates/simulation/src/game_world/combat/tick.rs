@@ -79,7 +79,8 @@ impl GameWorld {
         if source.kind.is_trebuchet() && self.trebuchet_transforming(id) {
             return;
         }
-        let original_goal = self.attack_goal(attacker.target, source.player);
+        let autonomous = attacker.origin.is_some() || attacker.resume.is_some();
+        let original_goal = self.attack_order_goal(attacker.target, source.player, autonomous);
         let stats = self.unit_state_stats(&source);
         let original_target = attacker.target;
         let attacker = self.refresh_contact_target(index, attacker, original_goal, &stats, changed);
@@ -88,7 +89,7 @@ impl GameWorld {
         let goal = if attacker.target == original_target {
             original_goal
         } else {
-            self.attack_goal(attacker.target, before.player)
+            self.attack_order_goal(attacker.target, before.player, autonomous)
         };
         let Some(goal) = goal else {
             self.end_attack(id, changed);

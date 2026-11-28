@@ -3,6 +3,10 @@ mod gameplay;
 pub use gameplay::HUMAN_COMMAND_BURST;
 pub use gameplay::MoveQueue;
 pub use gameplay::NativeAction;
+pub use gameplay::{
+    AllianceOffer, AlliedMarket, DiplomacySeat, DiplomacyView, DiplomaticStance,
+    valid_diplomacy_name,
+};
 pub use gameplay::{AnimalKind, AnimalState, AnimalTask, MAX_ANIMALS};
 pub use gameplay::{CombatStance, FogState, Formation};
 pub use gameplay::{

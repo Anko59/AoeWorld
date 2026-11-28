@@ -189,6 +189,11 @@ fn walk<S: Sink>(message: &ServerMessage, sink: &mut S) {
                 |q| (!queues::valid_queue(q)).then_some("queue.destinations"),
             );
         }
+        ServerMessage::Diplomacy(view) => {
+            if !view.valid() {
+                whole(sink, "Diplomacy", "diplomacy_view_in_range", Class::Economy);
+            }
+        }
         ServerMessage::Relics(view) => {
             if !view.valid() {
                 whole(sink, "Relics", "relic_view_in_range", Class::Economy);

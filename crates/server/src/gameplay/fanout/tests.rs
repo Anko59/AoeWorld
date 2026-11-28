@@ -299,7 +299,7 @@ async fn pending_subscription_holds_all_revision_updates_until_snapshot() {
         rebuild: true,
     }];
     let world = service.world.read().await;
-    let mut built = build(&world, &views, &BTreeMap::new(), (None, 1)).unwrap();
+    let mut built = build(&world, &[], &views, &BTreeMap::new(), (None, 1)).unwrap();
     drop(world);
     // A projectile starting on this tick exercises its independent baseline
     // without depending on combat wind-up or attack-range timing.
@@ -434,17 +434,15 @@ fn session_views_reuse_the_same_bounded_worker_pool_across_ticks() {
         .collect::<Vec<_>>();
     // Every pool size builds the same views: work stealing only moves them.
     let mut baseline = None;
+    let changes = BTreeMap::new();
     for threads in [2, 2, 1, 4, 12] {
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(threads)
             .build()
             .unwrap();
-        let built = pool.install(|| build(&world, &views, &BTreeMap::new(), (None, 1)).unwrap());
+        let built = pool.install(|| build(&world, &[], &views, &changes, (None, 1)).unwrap());
         assert_eq!(built.sessions.len(), 100);
-        let workers = built
-            .workers
-            .iter()
-            .collect::<std::collections::HashSet<_>>();
+        let workers: std::collections::HashSet<_> = built.workers.iter().collect();
         assert!(
             workers.len() <= threads,
             "per-tick OS threads escaped the shared pool: {} workers",

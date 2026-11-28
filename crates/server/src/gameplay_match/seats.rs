@@ -3,6 +3,8 @@
 //! whose whole surroundings are proven ocean or lake are dropped from coarse
 //! hydrology (microseconds), and the walk is pulled lazily so only as many
 //! tiles are examined as the search consumes.
+pub(super) mod cities;
+
 use super::{MatchError, ring_or_grid};
 use aoe_core::{PlayerId, TileCoord};
 use aoe_simulation::{EconomyError, GameWorld, GameWorldError, LandMasses, Terrain};

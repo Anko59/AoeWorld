@@ -198,6 +198,7 @@ pub type SiteFn = Box<dyn Fn(BuildingKind, Tile, i32, i32) -> Option<Tile>>;
 
 /// `fakes.FakeWorld`. Fields are public so a test edits the world between decisions.
 pub struct FakeWorld {
+    pub diplomacy: Option<aoe_sdk::DiplomacyView>,
     pub relics: Option<aoe_sdk::RelicView>,
     /// Replaces `find_build_site` (kind, near, radius, gap); queries still land in `sites`.
     pub site_fn: Option<SiteFn>,
@@ -238,6 +239,7 @@ impl FakeWorld {
     pub fn new(units: Vec<Unit>, buildings: Vec<Building>) -> Self {
         Self {
             relics: None,
+            diplomacy: None,
             site_fn: None,
             route_fn: None,
             frontier_fn: None,
@@ -300,6 +302,9 @@ impl FakeWorld {
 }
 
 impl View for FakeWorld {
+    fn diplomacy(&self) -> Option<&aoe_sdk::DiplomacyView> {
+        self.diplomacy.as_ref()
+    }
     fn relics(&self) -> Option<&aoe_sdk::RelicView> {
         self.relics.as_ref()
     }

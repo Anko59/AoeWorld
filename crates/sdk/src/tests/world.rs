@@ -61,7 +61,7 @@ fn welcome() -> M {
     }
 }
 
-fn unit(id: u32, player: PlayerId, kind: UnitKind) -> GameplayUnitState {
+pub(super) fn unit(id: u32, player: PlayerId, kind: UnitKind) -> GameplayUnitState {
     GameplayUnitState {
         id: EntityId(id),
         player,

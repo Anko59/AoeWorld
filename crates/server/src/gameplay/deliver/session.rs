@@ -34,6 +34,7 @@ pub(crate) struct Session {
     pub(crate) resident_players: BTreeMap<aoe_core::PlayerId, aoe_protocol::GameplayPlayerState>,
     pub(crate) resident_buildings: BTreeMap<EntityId, aoe_protocol::GameplayBuildingState>,
     pub(crate) resident_relics: Option<aoe_protocol::RelicView>,
+    pub(crate) resident_diplomacy: Option<aoe_protocol::DiplomacyView>,
     pub(crate) resident_animals: Vec<aoe_protocol::AnimalState>,
     pub(crate) resident_projectiles: Vec<aoe_protocol::ProjectileState>,
     pub(crate) resident_land: Option<Arc<aoe_simulation::LandControl>>,

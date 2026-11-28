@@ -161,4 +161,14 @@ pub(super) enum PendingAction {
     },
     StopSelection(Vec<EntityId>),
     Relic(aoe_protocol::RelicAction),
+    Diplomacy {
+        player: aoe_core::PlayerId,
+        stance: aoe_protocol::DiplomaticStance,
+    },
+    Tribute {
+        player: aoe_core::PlayerId,
+        market: EntityId,
+        resource: aoe_protocol::ResourceKind,
+        amount: u32,
+    },
 }

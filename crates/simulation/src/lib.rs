@@ -6,6 +6,7 @@ mod game_path;
 mod game_query;
 mod game_waypoints;
 mod game_world;
+pub use aoe_core::DiplomaticStance;
 pub use game_world::apply_research_stats;
 #[cfg(not(target_arch = "wasm32"))]
 pub use game_world::parallel::meter as parallel_meter;
