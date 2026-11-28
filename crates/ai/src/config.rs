@@ -17,6 +17,9 @@ pub struct Config {
     pub bridge_retry_seconds: u64,
     /// Bound host-issued work below the server's 100 orders/game-second budget.
     pub orders_per_decision: u32,
+    pub diplomacy_detachment_size: usize,
+    pub diplomacy_threat_radius: f64,
+    pub diplomacy_offer_interval_seconds: u64,
     pub site_queries_per_decision: u32,
 
     // --- economy ---
@@ -208,6 +211,9 @@ impl Default for Config {
             build_bridges: false,
             bridge_retry_seconds: 30,
             orders_per_decision: 40,
+            diplomacy_detachment_size: 12,
+            diplomacy_threat_radius: 20.0,
+            diplomacy_offer_interval_seconds: 60,
             site_queries_per_decision: 4,
             base_villagers: 60,
             castle_villagers: 28,

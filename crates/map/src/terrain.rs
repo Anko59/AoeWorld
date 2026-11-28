@@ -97,14 +97,7 @@ pub enum Provenance {
     HistoricallyCorrected,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[repr(u8)]
-pub enum ResourceKind {
-    Food,
-    Wood,
-    Gold,
-    Stone,
-}
+pub use aoe_core::ResourceKind;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[repr(u8)]

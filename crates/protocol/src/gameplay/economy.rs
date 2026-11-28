@@ -94,13 +94,7 @@ pub enum UnitTask {
     /// Adding construction progress to a farm by sowing seed.
     Seeding,
 }
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub enum ResourceKind {
-    Food,
-    Wood,
-    Gold,
-    Stone,
-}
+pub use aoe_core::ResourceKind;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct CarriedResource {
     pub kind: ResourceKind,

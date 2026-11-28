@@ -1,15 +1,5 @@
 use super::{GameplayService, PendingAction};
-use aoe_protocol::{GameplayClientMessage, ResourceKind};
-
-pub(super) fn native_resource(resource: ResourceKind) -> aoe_map::ResourceKind {
-    use aoe_map::ResourceKind as Native;
-    match resource {
-        ResourceKind::Food => Native::Food,
-        ResourceKind::Wood => Native::Wood,
-        ResourceKind::Gold => Native::Gold,
-        ResourceKind::Stone => Native::Stone,
-    }
-}
+use aoe_protocol::GameplayClientMessage;
 
 pub(super) async fn dispatch(
     service: &GameplayService,
@@ -22,6 +12,14 @@ pub(super) async fn dispatch(
             player,
             stance,
         } => (sequence, PendingAction::Diplomacy { player, stance }),
+        GameplayClientMessage::DiplomacyMessageOrder {
+            sequence,
+            player,
+            message,
+        } => (
+            sequence,
+            PendingAction::DiplomacyMessage { player, message },
+        ),
         GameplayClientMessage::TributeOrder {
             sequence,
             player,

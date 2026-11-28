@@ -37,9 +37,10 @@ fn diplomacy_messages_pin_the_current_wire() {
         }],
         tribute_market: Some(EntityId(9)),
         tribute_fee_permyriad: 0,
+        ..DiplomacyView::default()
     });
     let bytes = [
-        15, 7, 0, 1, 2, 1, 4, 76, 121, 111, 110, 2, 0, 1, 2, 6, 8, 1, 9, 0,
+        15, 7, 0, 1, 2, 1, 4, 76, 121, 111, 110, 2, 0, 1, 2, 6, 8, 1, 9, 0, 0, 0,
     ];
     assert_eq!(encode_server(&view).unwrap(), bytes);
     assert_eq!(decode_server(&bytes).unwrap(), view);
@@ -76,4 +77,30 @@ fn diplomacy_rejects_non_allied_markets_and_unbounded_names() {
         assert!(encode_server(&invalid).is_err());
         assert!(decode_server(&postcard::to_allocvec(&invalid).unwrap()).is_err());
     }
+}
+
+#[test]
+fn diplomacy_request_pins_the_current_wire_and_rejects_empty_tribute() {
+    use aoe_core::DiplomacyMessage;
+    let message = ClientMessage::DiplomacyMessageOrder {
+        sequence: 12,
+        player: PlayerId(2),
+        message: DiplomacyMessage::RequestTribute {
+            resource: ResourceKind::Gold,
+            amount: 100,
+        },
+    };
+    let bytes = [52, 12, 2, 1, 2, 100];
+    assert_eq!(encode_client(&message).unwrap(), bytes);
+    assert_eq!(decode_client(&bytes).unwrap(), message);
+    let invalid = ClientMessage::DiplomacyMessageOrder {
+        sequence: 12,
+        player: PlayerId(2),
+        message: DiplomacyMessage::RequestTribute {
+            resource: ResourceKind::Gold,
+            amount: 0,
+        },
+    };
+    assert!(encode_client(&invalid).is_err());
+    assert!(decode_client(&postcard::to_allocvec(&invalid).unwrap()).is_err());
 }

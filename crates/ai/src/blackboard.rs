@@ -43,11 +43,19 @@ pub struct Settlements {
 /// to the nearest of them.
 pub type Dropoffs = (Vec<Tile>, BTreeMap<Tile, f64>);
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DiplomacyProgress {
+    Mission(u64),
+    Ready(bool),
+    Answered,
+}
+
 /// Everything the managers share between decisions: orders in flight,
 /// refusals learned, plans, scouting progress and the attack state.
 #[derive(Clone, Debug)]
 pub struct Blackboard {
     pub tracked: BTreeMap<u64, Tracked>,
+    pub diplomacy_replies: BTreeMap<u64, DiplomacyProgress>,
     /// Resource nodes (or animals) a gather or hunt order was refused for.
     pub bad_resources: BTreeSet<u64>,
     /// (kind name, x, y) sites the server refused.
@@ -154,6 +162,7 @@ impl Default for Blackboard {
     fn default() -> Self {
         Self {
             tracked: BTreeMap::new(),
+            diplomacy_replies: BTreeMap::new(),
             bad_resources: BTreeSet::new(),
             bad_sites: BTreeSet::new(),
             blocked_units: BTreeSet::new(),

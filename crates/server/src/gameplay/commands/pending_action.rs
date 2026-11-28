@@ -165,6 +165,10 @@ pub(super) enum PendingAction {
         player: aoe_core::PlayerId,
         stance: aoe_protocol::DiplomaticStance,
     },
+    DiplomacyMessage {
+        player: aoe_core::PlayerId,
+        message: aoe_protocol::DiplomacyMessage,
+    },
     Tribute {
         player: aoe_core::PlayerId,
         market: EntityId,

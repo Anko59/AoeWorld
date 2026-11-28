@@ -251,6 +251,16 @@ impl GameWorld {
         self.relics.orders.remove(&monk);
     }
 
+    pub(crate) fn detach_conquered_relic(&mut self, id: EntityId) -> Option<EntityId> {
+        self.relics.carriers.remove(&id)
+    }
+
+    pub(crate) fn attach_conquered_relic(&mut self, id: EntityId, relic: Option<EntityId>) {
+        if let Some(relic) = relic {
+            self.relics.carriers.insert(id, relic);
+        }
+    }
+
     pub(crate) fn drop_monks_relic(&mut self, unit: GameUnit) {
         self.cancel_relic_order(unit.id);
         if unit.holds_relic

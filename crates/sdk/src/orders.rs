@@ -10,6 +10,10 @@ pub enum Order {
         player: PlayerId,
         stance: crate::DiplomaticStance,
     },
+    DiplomacyMessage {
+        player: PlayerId,
+        message: aoe_protocol::DiplomacyMessage,
+    },
     Tribute {
         player: PlayerId,
         market: EntityId,
@@ -206,6 +210,11 @@ impl Order {
         use GameplayClientMessage as M;
         Some(match self.clone() {
             Order::Relic(action) => M::RelicOrder { sequence, action },
+            Order::DiplomacyMessage { player, message } => M::DiplomacyMessageOrder {
+                sequence,
+                player,
+                message,
+            },
             Order::Diplomacy { player, stance } => M::DiplomacyOrder {
                 sequence,
                 player,

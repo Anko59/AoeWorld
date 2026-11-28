@@ -92,6 +92,7 @@ impl GameWorld {
         }
         probe(TickPhase::Wildlife);
         if self.economy.gatherers.is_empty()
+            && !self.has_pending_conquest()
             && self.combat.is_idle()
             && self.economy.builders.is_empty()
             && self.economy.garrison_orders.is_empty()
@@ -108,6 +109,7 @@ impl GameWorld {
         }
         self.advance_garrisons(&mut changed);
         self.advance_combat(&mut changed);
+        self.advance_surrender(&mut changed);
         probe(TickPhase::Combat);
         self.advance_construction(&mut changed);
         self.advance_gates();

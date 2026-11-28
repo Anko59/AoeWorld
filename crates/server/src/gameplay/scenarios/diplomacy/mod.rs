@@ -5,6 +5,15 @@ use aoe_simulation::{EconomyError, GameWorld};
 impl GameplayService {
     pub(crate) fn diplomacy_demo(seed: Seed, pair: bool) -> Result<Self, EconomyError> {
         let (world, starts) = GameWorld::diplomacy_demo(seed)?;
+        Ok(Self::diplomacy_scene(world, starts, pair))
+    }
+
+    pub(crate) fn diplomacy_conquest_demo(seed: Seed) -> Result<Self, EconomyError> {
+        let (world, starts) = GameWorld::diplomacy_conquest_demo(seed)?;
+        Ok(Self::diplomacy_scene(world, starts, false))
+    }
+
+    fn diplomacy_scene(world: GameWorld, starts: [aoe_core::EntityId; 2], pair: bool) -> Self {
         let slots = starts
             .into_iter()
             .enumerate()
@@ -22,6 +31,6 @@ impl GameplayService {
             [(PlayerId(1), "Lyon".to_owned())].into(),
         );
         service.set_paused(true);
-        Ok(service)
+        service
     }
 }

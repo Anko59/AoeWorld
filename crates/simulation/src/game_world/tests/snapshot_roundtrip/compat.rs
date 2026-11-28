@@ -66,6 +66,16 @@ fn busy() -> GameWorld {
     world
         .set_diplomatic_stance(PlayerId(0), PlayerId(1), crate::DiplomaticStance::Ally)
         .unwrap();
+    world
+        .send_diplomacy(
+            PlayerId(0),
+            PlayerId(1),
+            aoe_core::DiplomacyMessage::RequestTribute {
+                resource: aoe_map::ResourceKind::Wood,
+                amount: 100,
+            },
+        )
+        .unwrap();
     let at = |dx: i32, dy: i32| {
         aoe_core::WorldPosition::from_tile_center(TileCoord::new(start.x + dx, start.y + dy))
             .unwrap()

@@ -15,6 +15,7 @@ impl GameplayService {
         let service = self;
         match message {
             GameplayClientMessage::DiplomacyOrder { .. }
+            | GameplayClientMessage::DiplomacyMessageOrder { .. }
             | GameplayClientMessage::TributeOrder { .. } => {
                 super::diplomacy::dispatch(service, session_id, message).await
             }

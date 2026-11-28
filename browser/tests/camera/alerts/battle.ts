@@ -111,7 +111,7 @@ export async function battle(
   let revision: number[] = [];
   let socket: WebSocketRoute | undefined;
   const welcome = Buffer.from([
-    ...[0, 4, 1, 0, 0],
+    ...[0, 35, 1, 0, 0],
     ...uint(32_768),
     ...uint(32_768),
     ...uint(1_024),

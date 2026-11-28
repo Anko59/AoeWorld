@@ -279,6 +279,11 @@ fn fixtures_load_a_small_save_and_reject_its_snapshot_version() {
         0, // HP quarters
         0, // players
         0, // diplomatic stances
+        0, // diplomacy message ID
+        0, // diplomacy logs
+        0, // AI seats eligible to surrender
+        0, // surrender candidates
+        0, // surrendered seats
         0, // alliance offers
         0, // last hostile ticks
         0, // market recovery

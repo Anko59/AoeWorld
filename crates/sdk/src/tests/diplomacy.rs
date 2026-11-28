@@ -48,3 +48,31 @@ fn diplomacy_filters_combat_queries_without_hiding_the_allied_unit() {
     }));
     assert!(world.visible_enemies().is_empty());
 }
+
+#[test]
+fn diplomacy_resubscribe_empty_view_clears_the_previous_offer() {
+    let mut world = started();
+    let me = world.me().unwrap();
+    world.apply(S::Diplomacy(DiplomacyView {
+        revision: world.subscription,
+        viewer: me,
+        seats: vec![DiplomacySeat {
+            player: PlayerId(12),
+            name: None,
+            stance: DiplomaticStance::Enemy,
+            offer: AllianceOffer::Received,
+        }],
+        ..Default::default()
+    }));
+    assert_eq!(
+        world.diplomacy().unwrap().seats[0].offer,
+        AllianceOffer::Received
+    );
+    world.subscription += 1;
+    world.apply(S::Diplomacy(DiplomacyView {
+        revision: world.subscription,
+        viewer: me,
+        ..Default::default()
+    }));
+    assert!(world.diplomacy().unwrap().seats.is_empty());
+}

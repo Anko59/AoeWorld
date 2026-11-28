@@ -1,3 +1,5 @@
+mod conquest;
+
 use super::*;
 use aoe_core::{Seed, TileCoord, TileRect, WorldConfig, WorldPosition};
 
@@ -277,4 +279,216 @@ fn automatic_tower_damage_blocks_alliance_offers_until_combat_cools() {
     assert!(!restored.at_war(FIRST, SECOND));
     restored.offer_alliance(SECOND, FIRST).unwrap();
     assert!(restored.allied_seats(FIRST, SECOND));
+}
+
+#[test]
+fn allied_requests_are_private_validated_and_answered_once() {
+    use aoe_core::DiplomacyMessage;
+    let mut world = world();
+    let third = PlayerId(2);
+    world
+        .place_town_center(third, TileCoord::new(120, 30))
+        .unwrap();
+    let request = DiplomacyMessage::RequestTribute {
+        resource: ResourceKind::Wood,
+        amount: 100,
+    };
+    assert!(world.send_diplomacy(FIRST, SECOND, request).is_err());
+    world
+        .set_diplomatic_stance(FIRST, SECOND, DiplomaticStance::Ally)
+        .unwrap();
+    world.send_diplomacy(FIRST, SECOND, request).unwrap();
+    let sent = *world.diplomacy_log(SECOND).last().unwrap();
+    assert_eq!(sent.message, request);
+    assert_eq!(world.diplomacy_log(FIRST), world.diplomacy_log(SECOND));
+    assert!(world.diplomacy_log(third).is_empty());
+    let answer = DiplomacyMessage::Reply {
+        request: sent.id,
+        accepted: true,
+    };
+    assert!(world.send_diplomacy(FIRST, SECOND, answer).is_err());
+    // A true reply requires a completed Market and a successful transfer.
+    assert!(world.send_diplomacy(SECOND, FIRST, answer).is_err());
+    world
+        .insert_building(
+            SECOND,
+            BuildingKind::Market,
+            TileRect::from_xywh(190, 40, 4, 4),
+            true,
+        )
+        .unwrap();
+    world
+        .economy
+        .players
+        .get_mut(&SECOND)
+        .unwrap()
+        .stockpile
+        .wood = 130;
+    world.send_diplomacy(SECOND, FIRST, answer).unwrap();
+    assert_eq!(world.player_economy(SECOND).unwrap().stockpile.wood, 0);
+    assert_eq!(world.player_economy(FIRST).unwrap().stockpile.wood, 100);
+    assert!(world.send_diplomacy(SECOND, FIRST, answer).is_err());
+}
+
+#[test]
+fn losing_an_ai_town_center_transfers_survivors_and_stock_to_its_destroyer() {
+    use aoe_core::DiplomacyMessage;
+    let mut world = world();
+    world.set_diplomacy_ai_seats(&[SECOND]);
+    let center = world
+        .player_buildings_of(SECOND, BuildingKind::TownCenter)
+        .next()
+        .unwrap()
+        .id;
+    let house = world
+        .insert_building(
+            SECOND,
+            BuildingKind::House,
+            TileRect::from_xywh(200, 40, 2, 2),
+            true,
+        )
+        .unwrap();
+    let survivor = world.spawn_militia(SECOND, at(194, 32)).unwrap();
+    let attacker = world.spawn_militia(FIRST, at(189, 32)).unwrap();
+    world
+        .economy
+        .players
+        .get_mut(&SECOND)
+        .unwrap()
+        .stockpile
+        .gold = 75;
+    world.advance();
+    assert_eq!(world.building(house).unwrap().player, SECOND);
+
+    world.resolve_hit(
+        (attacker, FIRST),
+        center,
+        10_000,
+        0,
+        super::super::combat::DamageKind::Melee,
+        &mut Vec::new(),
+    );
+    world.advance();
+    assert_eq!(world.building(house).unwrap().player, FIRST);
+    assert_eq!(world.unit(survivor).unwrap().player, FIRST);
+    assert_eq!(world.player_economy(FIRST).unwrap().stockpile.gold, 75);
+    assert_eq!(
+        world.player_economy(SECOND).unwrap().stockpile,
+        Stockpile::default()
+    );
+    assert_eq!(world.surrendered_to(SECOND), Some(FIRST));
+    assert_eq!(
+        world.diplomacy_log(FIRST).last().unwrap().message,
+        DiplomacyMessage::Surrender
+    );
+}
+
+#[test]
+fn conquest_waits_for_a_weak_army_and_persists_the_conqueror() {
+    let mut world = world();
+    world.set_diplomacy_ai_seats(&[SECOND]);
+    let center = world
+        .player_buildings_of(SECOND, BuildingKind::TownCenter)
+        .next()
+        .unwrap()
+        .id;
+    let attacker = world.spawn_militia(FIRST, at(170, 40)).unwrap();
+    let defenders: Vec<_> = (0..5)
+        .map(|index| world.spawn_militia(SECOND, at(200 + index, 70)).unwrap())
+        .collect();
+    world.resolve_hit(
+        (attacker, FIRST),
+        center,
+        10_000,
+        0,
+        crate::DamageKind::Melee,
+        &mut Vec::new(),
+    );
+    world.advance();
+    assert_eq!(world.surrendered_to(SECOND), None);
+    let checkpoint = world.snapshot([0; 32]).unwrap();
+
+    let mut restored = GameWorld::new(world.config()).unwrap();
+    restored
+        .restore_snapshot(&checkpoint, [0; 32], &|| false)
+        .unwrap();
+    for game in [&mut world, &mut restored] {
+        game.resolve_hit(
+            (attacker, FIRST),
+            defenders[0],
+            10_000,
+            0,
+            crate::DamageKind::Melee,
+            &mut Vec::new(),
+        );
+        game.advance();
+        assert_eq!(game.surrendered_to(SECOND), Some(FIRST));
+        for &id in &defenders[1..] {
+            assert_eq!(game.unit(id).unwrap().player, FIRST);
+        }
+    }
+    assert_eq!(world.diplomacy_log(FIRST), restored.diplomacy_log(FIRST));
+}
+
+#[test]
+fn only_a_conquered_ai_surrenders() {
+    let mut world = world();
+    world.set_diplomacy_ai_seats(&[SECOND]);
+    let human_home = world
+        .player_buildings_of(FIRST, BuildingKind::TownCenter)
+        .next()
+        .unwrap()
+        .id;
+    let ai_home = world
+        .player_buildings_of(SECOND, BuildingKind::TownCenter)
+        .next()
+        .unwrap()
+        .id;
+    let attacker = world.spawn_militia(SECOND, at(190, 42)).unwrap();
+    world.resolve_hit(
+        (attacker, SECOND),
+        human_home,
+        10_000,
+        0,
+        crate::DamageKind::Melee,
+        &mut Vec::new(),
+    );
+    world.destroy_building(ai_home);
+    world.advance();
+    assert_eq!(world.surrendered_to(FIRST), None);
+    assert_eq!(world.surrendered_to(SECOND), None);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn surrender_is_identical_at_one_and_four_workers() {
+    let run = |threads| {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .unwrap()
+            .install(|| {
+                let mut world = world();
+                world.set_diplomacy_ai_seats(&[SECOND]);
+                let center = world
+                    .player_buildings_of(SECOND, BuildingKind::TownCenter)
+                    .next()
+                    .unwrap()
+                    .id;
+                let attacker = world.spawn_militia(FIRST, at(180, 40)).unwrap();
+                world.spawn_militia(SECOND, at(202, 40)).unwrap();
+                world.resolve_hit(
+                    (attacker, FIRST),
+                    center,
+                    10_000,
+                    0,
+                    crate::DamageKind::Melee,
+                    &mut Vec::new(),
+                );
+                world.advance();
+                assert_eq!(world.surrendered_to(SECOND), Some(FIRST));
+                world.canonical_hash()
+            })
+    };
+    assert_eq!(run(1), run(4));
 }

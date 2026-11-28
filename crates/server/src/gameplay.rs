@@ -295,10 +295,15 @@ impl GameplayService {
         let holding_message = economy::holdings::message(&land, revision, world.tick());
         session.resident_land = Some(land);
         let mut initial = vec![snapshot, wildlife, fog, projectile_message, holding_message];
+        let had_diplomacy = session.resident_diplomacy.is_some();
         session.resident_diplomacy =
             diplomacy::view(&world, &self.slots, player, revision, session.ai);
-        if let Some(view) = session.resident_diplomacy.clone() {
-            initial.push(GameplayServerMessage::Diplomacy(view));
+        if had_diplomacy || session.resident_diplomacy.is_some() {
+            initial.push(diplomacy::replacement(
+                player,
+                revision,
+                session.resident_diplomacy.as_ref(),
+            ));
         }
         if let Some(view) = session.resident_relics.clone() {
             initial.push(GameplayServerMessage::Relics(view));

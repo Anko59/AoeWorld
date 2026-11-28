@@ -97,3 +97,50 @@ test("two seats agree an alliance, share market locations and receive tribute", 
     await other.close();
   }
 });
+
+test("Lyon answers through the diplomacy log and surrenders after its Town Center falls", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(95_000);
+  await gameAssets(page, true);
+  expect(
+    (await request.post("/maps/reset?scenario=diplomacy-conquest")).status(),
+  ).toBe(204);
+  await page.goto("/?play=1#x=115&y=104&zoom=.65");
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-connected",
+    "true",
+  );
+  await freshHud(page);
+  await page.locator("#unpause-game").click();
+
+  await page.getByRole("button", { name: "Diplomacy", exact: true }).click();
+  const stance = page.getByRole("combobox", { name: "Stance toward Lyon" });
+  const log = page.getByRole("list", { name: "Message log" });
+  const messageKind = page.getByRole("combobox", {
+    name: "Request",
+    exact: true,
+  });
+  await messageKind.selectOption("ally");
+  await page.getByRole("button", { name: "Send request" }).click();
+  await expect(log).toContainText("You → Lyon: Agree to an alliance");
+  await expect(log).toContainText(
+    "Lyon → You: Accepted · Agree to an alliance",
+  );
+  await expect(stance).toHaveValue("2");
+
+  await messageKind.selectOption("tribute");
+  await page.getByRole("button", { name: "Send request" }).click();
+  await expect(log).toContainText("You → Lyon: Send 100 food");
+  await expect(log).toContainText("Lyon → You: Accepted · Send 100 food");
+
+  await stance.selectOption({ label: "Enemy" });
+  await expect(stance).toHaveValue("0");
+  await page.getByRole("button", { name: "Close diplomacy" }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Lyon surrendered to you." }),
+  ).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: "Diplomacy", exact: true }).click();
+  await expect(log).toContainText("Lyon surrendered to you.");
+});

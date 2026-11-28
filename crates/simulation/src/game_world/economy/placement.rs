@@ -3,6 +3,7 @@ use crate::{GameWorld, GameWorldError, Terrain, UnitKind};
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
 use std::collections::{BTreeSet, VecDeque};
 
+mod conquest;
 mod removal;
 
 /// The outermost bulk load under way. Its end counts the owners it touched,
@@ -188,7 +189,7 @@ impl GameWorld {
     }
 
     /// Housing space from completed owned buildings, with saturating arithmetic.
-    pub(super) fn refresh_population_cap(&mut self, player: PlayerId) {
+    pub(crate) fn refresh_population_cap(&mut self, player: PlayerId) {
         if let Some(due) = &mut self.economy.housing_due {
             due.insert(player);
             return;

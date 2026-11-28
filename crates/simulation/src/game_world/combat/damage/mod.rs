@@ -242,6 +242,9 @@ impl GameWorld {
                     changed.extend(self.query(rect).0.into_iter().map(|u| u.id));
                 }
                 self.destroy_building(target);
+                if building_kind == crate::BuildingKind::TownCenter {
+                    self.town_center_conquered(player, attacker_player);
+                }
                 self.finish_target_attack(attacker_id, target, changed);
             }
         }

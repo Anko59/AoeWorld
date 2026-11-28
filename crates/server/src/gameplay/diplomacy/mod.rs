@@ -51,7 +51,9 @@ pub(super) fn view(
             .map(|slot| seat(slot.player, slot.name.clone()))
             .collect::<Vec<_>>()
     };
-    if seats.is_empty() {
+    let log = world.diplomacy_log(viewer);
+    let surrendered_to = world.surrendered_to(viewer);
+    if seats.is_empty() && log.is_empty() && surrendered_to.is_none() {
         return None;
     }
     seats.sort_unstable_by_key(|seat| seat.player);
@@ -66,6 +68,8 @@ pub(super) fn view(
         viewer,
         seats,
         markets,
+        log: log.to_vec(),
+        surrendered_to,
         tribute_market: (!ai).then(|| world.tribute_market(viewer)).flatten(),
         tribute_fee_permyriad: if ai {
             0
@@ -85,11 +89,17 @@ pub(super) fn message(
     if session.resident_diplomacy.as_ref() == view {
         return None;
     }
-    Some(GameplayServerMessage::Diplomacy(view.cloned().unwrap_or(
-        DiplomacyView {
-            revision,
-            viewer: session.viewer,
-            ..DiplomacyView::default()
-        },
-    )))
+    Some(replacement(session.viewer, revision, view))
+}
+
+pub(super) fn replacement(
+    viewer: PlayerId,
+    revision: u64,
+    view: Option<&DiplomacyView>,
+) -> GameplayServerMessage {
+    GameplayServerMessage::Diplomacy(view.cloned().unwrap_or(DiplomacyView {
+        revision,
+        viewer,
+        ..DiplomacyView::default()
+    }))
 }

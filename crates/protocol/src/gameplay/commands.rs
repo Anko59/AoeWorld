@@ -335,6 +335,11 @@ pub enum ClientMessage {
         resource: ResourceKind,
         amount: u32,
     },
+    DiplomacyMessageOrder {
+        sequence: u64,
+        player: PlayerId,
+        message: DiplomacyMessage,
+    },
 }
 
 pub const MAX_TRAIN_BATCH: usize = 5;
@@ -358,6 +363,11 @@ fn bounded_members<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<EntityId>, D::
 }
 
 pub(super) fn validate(message: &ClientMessage) -> Result<(), Error> {
+    if let ClientMessage::DiplomacyMessageOrder { message, .. } = message
+        && !message.valid_request()
+    {
+        return Err(Error::InvalidEconomyState);
+    }
     if let ClientMessage::TrainBatchOrder { building_ids, .. } = message
         && !(1..=MAX_TRAIN_BATCH).contains(&building_ids.len())
     {
