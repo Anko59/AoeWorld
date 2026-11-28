@@ -234,6 +234,7 @@ pub struct PlayerEconomy {
     pub population_used: u32,
     pub(crate) upkeep_remainder: u32,
     pub(crate) upkeep_shortage: bool,
+    pub(crate) upkeep_slow_ticks: u64,
     /// Space provided by completed owned buildings; no gameplay maximum.
     pub population_cap: u32,
     pub age: super::Age,

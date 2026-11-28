@@ -99,6 +99,7 @@ impl GameWorld {
                 gold: n,
                 stone: n,
             };
+            state.clear_funded_shortage();
         }
         seeded.depleted_nodes = self.seed_depletion(center, seat.depleted_radius);
         // Bridges first: their banks must still be open ground.

@@ -120,6 +120,7 @@ impl GameWorld {
                     .stockpile
                     .food
                     .saturating_add(VILLAGE_RULES.villager_food_cost);
+                state.clear_funded_shortage();
             }
         } else {
             self.refund_unit_cost(player, entry.kind);

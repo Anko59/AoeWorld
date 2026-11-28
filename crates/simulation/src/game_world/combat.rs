@@ -389,13 +389,45 @@ impl GameWorld {
         {
             centiseconds = centiseconds * 100 / 115;
         }
-        let period = (self.config.tick_hz.saturating_mul(centiseconds) / 100).max(1);
-        if unit.kind.needs_food_upkeep()
-            && economy.is_some_and(|p| p.upkeep_shortage && p.stockpile.food == 0)
-        {
-            period.saturating_mul(2)
+        (self.config.tick_hz.saturating_mul(centiseconds) / 100).max(1)
+    }
+
+    // Military deadlines use half-tick units. Deducting one half-tick for
+    // every starved tick preserves progress when a player's supply changes.
+    fn weapon_clock(&self, unit: &GameUnit) -> (u64, u64) {
+        let now = self.tick.0;
+        if !unit.kind.needs_food_upkeep() {
+            return (now, 1);
+        }
+        let state = self.economy.players.get(&unit.player);
+        let slow_ticks = state.map_or(0, |p| p.upkeep_slow_ticks);
+        let shortage = state.is_some_and(|p| p.upkeep_shortage && p.stockpile.food == 0);
+        (
+            now.saturating_mul(2).saturating_sub(slow_ticks),
+            2 - u64::from(shortage),
+        )
+    }
+
+    pub(crate) fn set_weapon_cooldown(&mut self, index: usize, ticks: u64) {
+        let unit = &self.units[index].state;
+        let (clock, _) = self.weapon_clock(unit);
+        let scale = 1 + u64::from(unit.kind.needs_food_upkeep());
+        self.units[index].next_hit_tick = clock.saturating_add(ticks.saturating_mul(scale));
+    }
+
+    /// Project the cooldown deadline onto world ticks at the current speed.
+    pub(crate) fn weapon_ready_tick(&self, index: usize) -> u64 {
+        let unit = &self.units[index];
+        if unit.next_hit_tick == 0 {
+            return 0;
+        }
+        let (clock, speed) = self.weapon_clock(&unit.state);
+        if let Some(remaining) = unit.next_hit_tick.checked_sub(clock) {
+            self.tick.0.saturating_add(remaining.div_ceil(speed))
         } else {
-            period
+            self.tick
+                .0
+                .saturating_sub((clock - unit.next_hit_tick) / speed)
         }
     }
 }

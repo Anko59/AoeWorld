@@ -134,9 +134,10 @@ Civilian and management units are exempt. Fractional food accrues each tick,
 carries through save and load, and is deducted when it reaches a whole food.
 
 The food HUD shows the current bill per minute. Missing a payment triggers a
-shortage until food returns. New military training is refused, prepaid queues
-continue, and unit attacks started during a shortage take twice as long to
-ready the next attack. Missed whole-food payments are forgiven.
+shortage until food returns. New military training is refused and prepaid
+queues continue. Attack cooldowns progress at half speed during a shortage
+and resume normal speed when food is credited. Missed whole-food payments
+are forgiven.
 
 ## Dark Age buildings
 

@@ -76,6 +76,7 @@ impl Economy {
             aoe_map::ResourceKind::Stone => player.stockpile.stone,
         };
         player.stockpile.deposit(load);
+        player.clear_funded_shortage();
         let credited = u32::from(load.amount).min(u32::MAX - before);
         if credited > 0 {
             self.income.entry(owner).or_default().record(

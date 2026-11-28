@@ -1,9 +1,81 @@
-use super::*;
+use super::{buildings::set_stock, *};
 
 const PLAYER: PlayerId = PlayerId(0);
 
 fn food(world: &GameWorld) -> u32 {
     world.player_economy(PLAYER).unwrap().stockpile.food
+}
+
+#[test]
+fn a_market_delivery_clears_the_shortage_even_if_spent_in_the_same_tick() {
+    let (mut world, _, center) = village();
+    world.complete_research(PLAYER, crate::Tech::FeudalAge, &mut Vec::new());
+    let mut insert = |kind, x| {
+        world
+            .insert_building(PLAYER, kind, TileRect::from_xywh(x, 82, 4, 4), true)
+            .unwrap()
+    };
+    let market = insert(BuildingKind::Market, 82);
+    let range = insert(BuildingKind::ArcheryRange, 92);
+    set_stock(&mut world, 0, 500, 500, 0);
+    let minute = world.config().tick_hz * 60;
+    advance(&mut world, minute);
+    assert_eq!(world.food_upkeep(PLAYER), (1, true));
+
+    world
+        .issue_market_buy(PLAYER, market, ResourceKind::Food)
+        .unwrap();
+    world
+        .issue_train(PLAYER, center, UnitKind::Villager)
+        .unwrap();
+    world
+        .issue_train(PLAYER, center, UnitKind::Villager)
+        .unwrap();
+    assert_eq!(food(&world), 0);
+    assert_eq!(world.food_upkeep(PLAYER), (1, false));
+    world.issue_train(PLAYER, range, UnitKind::Archer).unwrap();
+}
+
+#[test]
+fn supplies_change_the_speed_of_an_attack_cooldown_in_progress() {
+    let (mut world, _, _) = village();
+    world.set_tick_hz(10);
+    let at = |x| WorldPosition::from_tile_center(TileCoord::new(x, 96)).unwrap();
+    let attacker = world.spawn_kind(PLAYER, UnitKind::Militia, at(96)).unwrap();
+    set_stock(&mut world, 0, 0, 0, 0);
+    let period = world.attack_period_ticks(&world.unit(attacker).unwrap());
+    let first_bill = 300;
+    advance(&mut world, first_bill - 8);
+    let victim = world.spawn_villager(PlayerId(1), at(97)).unwrap();
+    world.issue_attack(PLAYER, attacker, victim).unwrap();
+    let initial_hp = world.unit(victim).unwrap().hp;
+    while world.unit(victim).unwrap().hp == initial_hp && world.tick().0 < u64::from(first_bill) {
+        world.advance();
+    }
+    let first_hit = world.tick().0 as u32;
+    let hp = world.unit(victim).unwrap().hp;
+    assert!(hp < initial_hp && first_hit < first_bill);
+
+    advance(&mut world, period);
+    assert_eq!(world.food_upkeep(PLAYER), (2, true));
+    assert_eq!(world.unit(victim).unwrap().hp, hp);
+
+    let tick = world.tick().0;
+    world.economy.credit_delivery(
+        PLAYER,
+        CarriedResource {
+            kind: ResourceKind::Food,
+            amount: 10,
+        },
+        tick,
+        10,
+    );
+    let slow_ticks = first_hit + period - first_bill + 1;
+    let remaining = slow_ticks.div_ceil(2);
+    advance(&mut world, remaining - 1);
+    assert_eq!(world.unit(victim).unwrap().hp, hp);
+    world.advance();
+    assert!(world.unit(victim).unwrap().hp < hp);
 }
 
 #[test]
@@ -30,8 +102,8 @@ fn upkeep_charges_living_army_continuously_and_excludes_workers() {
 }
 
 #[test]
-fn empty_stores_block_recruitment_and_slow_attacks_until_food_returns() {
-    let (mut world, scout, center) = village();
+fn empty_stores_block_recruitment_until_food_returns() {
+    let (mut world, _, center) = village();
     world.complete_research(PLAYER, crate::Tech::FeudalAge, &mut Vec::new());
     let range = world
         .insert_building(
@@ -41,8 +113,6 @@ fn empty_stores_block_recruitment_and_slow_attacks_until_food_returns() {
             true,
         )
         .unwrap();
-    let scout = world.unit(scout).unwrap();
-    let normal = world.attack_period_ticks(&scout);
     world
         .economy
         .players
@@ -53,9 +123,9 @@ fn empty_stores_block_recruitment_and_slow_attacks_until_food_returns() {
     let minute = world.config().tick_hz * 60;
     advance(&mut world, minute);
     assert_eq!(world.food_upkeep(PLAYER), (1, true));
-    assert_eq!(world.attack_period_ticks(&scout), 2 * normal);
     let (resumed, _) = super::super::snapshot_roundtrip::roundtrip(&world, super::super::world());
     assert_eq!(resumed.food_upkeep(PLAYER), (1, true));
+    assert_eq!(resumed.player_economy(PLAYER).unwrap().upkeep_slow_ticks, 1);
     assert_eq!(
         world.issue_train(PLAYER, range, UnitKind::Archer),
         Err(EconomyError::InsufficientFood)
@@ -69,7 +139,6 @@ fn empty_stores_block_recruitment_and_slow_attacks_until_food_returns() {
         .stockpile
         .food = 200;
     assert_eq!(world.food_upkeep(PLAYER), (1, false));
-    assert_eq!(world.attack_period_ticks(&scout), normal);
     world
         .issue_train(PLAYER, center, UnitKind::Villager)
         .unwrap();

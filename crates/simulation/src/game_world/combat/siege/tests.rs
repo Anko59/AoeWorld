@@ -33,6 +33,7 @@ fn imperial(researched: &[Tech]) -> GameWorld {
                 population_used: 0,
                 upkeep_remainder: 0,
                 upkeep_shortage: false,
+                upkeep_slow_ticks: 0,
                 population_cap: 200,
                 age: Age::Imperial,
                 researched: [Tech::FeudalAge, Tech::CastleAge, Tech::ImperialAge]

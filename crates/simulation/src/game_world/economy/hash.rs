@@ -104,6 +104,7 @@ impl Economy {
             hash.update(&player.population_used.to_le_bytes());
             hash.update(&player.upkeep_remainder.to_le_bytes());
             hash.update(&[u8::from(player.upkeep_shortage)]);
+            hash.update(&player.upkeep_slow_ticks.to_le_bytes());
             hash.update(&player.population_cap.to_le_bytes());
             hash.update(&[player.age as u8]);
             hash.update(&player.researched.to_le_bytes());

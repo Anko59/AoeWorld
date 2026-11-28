@@ -62,6 +62,7 @@ impl GameWorld {
             stock.wood = stock.wood.saturating_add(wood);
             stock.gold = stock.gold.saturating_add(gold);
             stock.stone = stock.stone.saturating_add(stone);
+            state.clear_funded_shortage();
         }
     }
 

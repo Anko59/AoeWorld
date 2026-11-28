@@ -32,6 +32,10 @@ The baseline engine and observer revision was
 JSONL streams include every complete minute, exact first sightings, and
 the actual ending tick and reason.
 
+These runs preceded the review fixes. The trial chose each cooldown when
+the unit attacked. The final rule adjusts cooldown progress as supplies
+change and clears a shortage as soon as food is credited.
+
 ## Eight seats
 
 Both matches reached tick 72,000. The baseline took 13.26 wall minutes,

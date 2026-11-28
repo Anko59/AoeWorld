@@ -24,7 +24,7 @@ use std::{
 mod timing;
 
 /// Save format with the last hostile tick of each pair of seats.
-pub const SAVE_VERSION: u16 = 30;
+pub const SAVE_VERSION: u16 = 31;
 const MAX_NAME: usize = 60;
 const MAX_SAVE_BYTES: u64 = 2 << 30;
 

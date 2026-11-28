@@ -128,7 +128,7 @@ fn twelve_militia_surround_a_house_and_every_one_strikes() {
         w.advance();
         for (n, &id) in ids.iter().enumerate() {
             let unit = w.unit(id).unwrap();
-            if w.units[w.lookup[&id]].next_hit_tick > w.tick().0 {
+            if w.weapon_ready_tick(w.lookup[&id]) > w.tick().0 {
                 hit.insert(id);
             }
             if unit.position != last[n].0 || hit.contains(&id) {
@@ -170,7 +170,7 @@ fn eight_archers_stop_at_range_and_fire_without_crowding_the_house() {
         w.advance();
         for (n, &id) in ids.iter().enumerate() {
             let unit = w.unit(id).unwrap();
-            if w.units[w.lookup[&id]].next_hit_tick > w.tick().0 {
+            if w.weapon_ready_tick(w.lookup[&id]) > w.tick().0 {
                 fired.insert(id);
             }
             if fired.contains(&id) {
@@ -392,7 +392,7 @@ fn approaching_melee_units_reserve_contact_positions_using_both_body_radii() {
         w.advance();
         for (n, &id) in ids.iter().enumerate() {
             let u = w.unit(id).unwrap();
-            if w.units[w.lookup[&id]].next_hit_tick > w.tick().0 {
+            if w.weapon_ready_tick(w.lookup[&id]) > w.tick().0 {
                 hit.insert(id);
                 let target = w.unit(target).unwrap();
                 let r = i64::from(u.kind.collision_radius() + target.kind.collision_radius());

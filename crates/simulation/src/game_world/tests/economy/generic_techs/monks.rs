@@ -65,7 +65,7 @@ fn a_converting_monk_rests_and_illumination_halves_the_rest() {
         .unwrap();
     let first = enemy(&mut w, UnitKind::Villager, 94);
     convert(&mut w, monk, first);
-    let rest = w.units[w.lookup[&monk]].next_hit_tick - w.tick.0;
+    let rest = w.weapon_ready_tick(w.lookup[&monk]) - w.tick.0;
     assert!(
         rest > 50 * u64::from(w.config().tick_hz),
         "rested {rest} ticks"
@@ -77,7 +77,7 @@ fn a_converting_monk_rests_and_illumination_halves_the_rest() {
         .unwrap();
     let villager = enemy(&mut w2, UnitKind::Villager, 94);
     convert(&mut w2, monk2, villager);
-    let rest2 = w2.units[w2.lookup[&monk2]].next_hit_tick - w2.tick.0;
+    let rest2 = w2.weapon_ready_tick(w2.lookup[&monk2]) - w2.tick.0;
     assert!(
         rest2 < rest * 6 / 10 && rest2 > 25 * u64::from(w2.config().tick_hz),
         "{rest2} vs {rest}"
@@ -191,7 +191,7 @@ fn theocracy_lets_only_the_converting_monk_rest() {
         w.issue_attack(PlayerId(0), a, villager).unwrap();
         advance(&mut w, 40);
         let tick = w.tick.0;
-        [a, b].map(|id| w.units[w.lookup[&id]].next_hit_tick > tick + 20 * 20)
+        [a, b].map(|id| w.weapon_ready_tick(w.lookup[&id]) > tick + 20 * 20)
     };
     let without = rested(false);
     assert_eq!(

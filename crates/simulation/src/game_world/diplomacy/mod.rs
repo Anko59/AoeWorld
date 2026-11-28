@@ -285,11 +285,13 @@ impl GameWorld {
             .get_mut(&from)
             .expect("validated sender")
             .stockpile = debit;
-        self.economy
+        let recipient = self
+            .economy
             .players
             .get_mut(&to)
-            .expect("validated recipient")
-            .stockpile = credit;
+            .expect("validated recipient");
+        recipient.stockpile = credit;
+        recipient.clear_funded_shortage();
         Ok(())
     }
 }

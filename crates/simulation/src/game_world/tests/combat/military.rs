@@ -16,6 +16,7 @@ pub(super) fn feudal(w: &mut GameWorld) {
             population_used: 0,
             upkeep_remainder: 0,
             upkeep_shortage: false,
+            upkeep_slow_ticks: 0,
             population_cap: 200,
             age: Age::Feudal,
             researched: Tech::FeudalAge.bit(),

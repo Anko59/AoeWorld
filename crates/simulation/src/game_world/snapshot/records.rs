@@ -9,7 +9,7 @@ use aoe_core::{EntityId, Formation, PlayerId, TileRect, WorldPosition};
 use aoe_map::ResourceOverlaySnapshot;
 use serde::{Deserialize, Serialize};
 
-pub const WORLD_SNAPSHOT_VERSION: u16 = 39;
+pub const WORLD_SNAPSHOT_VERSION: u16 = 40;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WorldSnapshot {
@@ -209,6 +209,7 @@ impl BuildingRecord {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct UnitRecord {
     pub unit: GameUnit,
+    /// Military deadlines are in half-ticks of the owner's weapon clock.
     pub next_hit_tick: u64,
     pub(crate) transform_until: Option<u64>,
     pub(crate) swing_started: Option<u64>,

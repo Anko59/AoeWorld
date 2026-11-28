@@ -160,7 +160,7 @@ impl GameWorld {
             .flatten()
             .or(Some(now));
         if ready {
-            self.units[index].next_hit_tick = now + u64::from(self.attack_period_ticks(&before));
+            self.set_weapon_cooldown(index, u64::from(self.attack_period_ticks(&before)));
             self.strike(id, attacker.target, changed);
             if let Some(since) = since.take().filter(|&since| since != u64::MAX) {
                 self.combat.stats.first_hits += 1;

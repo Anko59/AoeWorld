@@ -1,8 +1,14 @@
-use crate::{GameWorld, UnitKind};
+use crate::{GameWorld, PlayerEconomy, UnitKind};
 use aoe_core::PlayerId;
 
 const QUANTA_PER_SECOND: u64 = 1_000_000;
 const QUANTA_PER_FOOD: u64 = 60 * QUANTA_PER_SECOND;
+
+impl PlayerEconomy {
+    pub(crate) fn clear_funded_shortage(&mut self) {
+        self.upkeep_shortage &= self.stockpile.food == 0;
+    }
+}
 
 impl UnitKind {
     /// Units supplied at one food per game minute, including Scouts, Monks
@@ -57,6 +63,7 @@ impl GameWorld {
             // immediately, and each subsequent tick collects only its own bill.
             state.stockpile.food = food.saturating_sub(bill);
             state.upkeep_shortage = bill > food || (food == 0 && state.upkeep_shortage);
+            state.upkeep_slow_ticks += u64::from(state.upkeep_shortage);
         }
     }
 }
