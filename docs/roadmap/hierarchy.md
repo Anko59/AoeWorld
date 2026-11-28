@@ -14,7 +14,7 @@
 
 | item | asked | status | evidence |
 | --- | --- | --- | --- |
-| Steward and Vassal action areas still drawn and felt as perfect circles; no visible change in Steward or Vassal behaviour after #962 and #975 | 11-22 x1 | DONE | #1038 moved server membership, discovery and rally checks to the walking field. #1136 was IN FLIGHT at the brief cutoff and merged 11-27 at 07:21 CET; the detailed and strategic views draw the server walking shape. Recheck in play. |
+| Steward and Vassal action areas still drawn and felt as perfect circles; no visible change in Steward or Vassal behaviour after #962 and #975 | 11-22 x1 | DONE | #1038 moved server membership, discovery and rally checks to the walking field. #1136 merged 11-27 at 07:21 CET. The detailed and strategic views draw the server walking shape. Recheck in play. |
 | Vassal roads: trunk routes linking production, centre, gates; bridges first | 11-05, 11-06, 11-09 x3 | DONE | #975 plans shared trunk roads and queues bridge foundations first. Recheck in play. |
 | Vassal calls Generals from too far (5 across a river) | 11-09 x1 | DONE | #975 calls Generals within 32 tiles of the Castle only when they can reach the threat and have no active owner order. Recheck in play. |
 | What Vassals do with their 20 defence units | 11-09 x1 | DONE | #975 shows each defence squad’s current activities in the Castle panel. Recheck in play. |
